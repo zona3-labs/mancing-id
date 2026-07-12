@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SqlDialectMappings">
+    <file url="file://$PROJECT_DIR$/internal/brand/query/brand.sql" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/migrations/00001_create_categories_table.sql" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/migrations/00002_create_brands_table.sql" dialect="GenericSQL" />
+    <file url="file://$PROJECT_DIR$/migrations/00003_create_products_table.sql" dialect="GenericSQL" />
+    <file url="PROJECT" dialect="PostgreSQL" />
+  </component>
+</project>
