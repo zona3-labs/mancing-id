@@ -11,5 +11,12 @@ CREATE TABLE categories (
     deleted_at  TIMESTAMPTZ
 );
 
+CREATE INDEX idx_categories_parent_id  ON categories(parent_id);
+CREATE INDEX idx_categories_is_active  ON categories(is_active);
+CREATE INDEX idx_categories_deleted_at ON categories(deleted_at);
+
 -- +goose Down
+DROP INDEX IF EXISTS idx_categories_deleted_at;
+DROP INDEX IF EXISTS idx_categories_is_active;
+DROP INDEX IF EXISTS idx_categories_parent_id;
 DROP TABLE IF EXISTS categories;

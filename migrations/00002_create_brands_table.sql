@@ -11,5 +11,10 @@ CREATE TABLE brands (
     deleted_at  TIMESTAMPTZ
 );
 
+CREATE INDEX idx_brands_is_active  ON brands(is_active);
+CREATE INDEX idx_brands_deleted_at ON brands(deleted_at);
+
 -- +goose Down
+DROP INDEX IF EXISTS idx_brands_deleted_at;
+DROP INDEX IF EXISTS idx_brands_is_active;
 DROP TABLE IF EXISTS brands;

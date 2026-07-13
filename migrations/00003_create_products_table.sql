@@ -15,6 +15,15 @@ CREATE TABLE products (
     deleted_at  TIMESTAMPTZ
 );
 
+CREATE INDEX idx_products_brand_id    ON products(brand_id);
+CREATE INDEX idx_products_status      ON products(status);
+CREATE INDEX idx_products_is_featured ON products(is_featured);
+CREATE INDEX idx_products_deleted_at  ON products(deleted_at);
+
 -- +goose Down
+DROP INDEX IF EXISTS idx_products_deleted_at;
+DROP INDEX IF EXISTS idx_products_is_featured;
+DROP INDEX IF EXISTS idx_products_status;
+DROP INDEX IF EXISTS idx_products_brand_id;
 DROP TABLE IF EXISTS products;
 DROP TYPE IF EXISTS product_status;
