@@ -36,3 +36,21 @@ type Product struct {
 	UpdatedAt        time.Time     `json:"updated_at"`
 	DeletedAt        *time.Time    `json:"deleted_at,omitempty"`
 }
+
+type ProductOption struct {
+	ID        uuid.UUID `json:"id"`
+	ProductID uuid.UUID `json:"product_id"`
+	Name      string    `json:"name"`
+	Position  int16     `json:"position"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type ProductOptionValue struct {
+	ID              uuid.UUID `json:"id"`
+	ProductOptionID uuid.UUID `json:"product_option_id"`
+	Value           string    `json:"value"`
+	Position        int16     `json:"position"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}

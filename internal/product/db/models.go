@@ -56,6 +56,49 @@ func (ns NullProductStatus) Value() (driver.Value, error) {
 	return string(ns.ProductStatus), nil
 }
 
+type VariantStatus string
+
+const (
+	VariantStatusDraft    VariantStatus = "draft"
+	VariantStatusActive   VariantStatus = "active"
+	VariantStatusArchived VariantStatus = "archived"
+)
+
+func (e *VariantStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = VariantStatus(s)
+	case string:
+		*e = VariantStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for VariantStatus: %T", src)
+	}
+	return nil
+}
+
+type NullVariantStatus struct {
+	VariantStatus VariantStatus `json:"variant_status"`
+	Valid         bool          `json:"valid"` // Valid is true if VariantStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullVariantStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.VariantStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.VariantStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullVariantStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.VariantStatus), nil
+}
+
 type Brand struct {
 	ID        uuid.UUID      `json:"id"`
 	Name      string         `json:"name"`
@@ -90,4 +133,52 @@ type Product struct {
 	CreatedAt        time.Time     `json:"created_at"`
 	UpdatedAt        time.Time     `json:"updated_at"`
 	DeletedAt        *time.Time    `json:"deleted_at"`
+}
+
+type ProductImage struct {
+	ID        uuid.UUID      `json:"id"`
+	ProductID uuid.UUID      `json:"product_id"`
+	Url       string         `json:"url"`
+	AltText   sql.NullString `json:"alt_text"`
+	Position  int16          `json:"position"`
+	IsPrimary bool           `json:"is_primary"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+}
+
+type ProductOption struct {
+	ID        uuid.UUID `json:"id"`
+	ProductID uuid.UUID `json:"product_id"`
+	Name      string    `json:"name"`
+	Position  int16     `json:"position"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type ProductOptionValue struct {
+	ID              uuid.UUID `json:"id"`
+	ProductOptionID uuid.UUID `json:"product_option_id"`
+	Value           string    `json:"value"`
+	Position        int16     `json:"position"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+type ProductVariant struct {
+	ID        uuid.UUID      `json:"id"`
+	ProductID uuid.UUID      `json:"product_id"`
+	ImageID   uuid.NullUUID  `json:"image_id"`
+	Sku       string         `json:"sku"`
+	Price     string         `json:"price"`
+	Stock     int32          `json:"stock"`
+	Weight    sql.NullString `json:"weight"`
+	Status    VariantStatus  `json:"status"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt sql.NullTime   `json:"deleted_at"`
+}
+
+type ProductVariantOptionValue struct {
+	VariantID            uuid.UUID `json:"variant_id"`
+	ProductOptionValueID uuid.UUID `json:"product_option_value_id"`
 }
