@@ -136,46 +136,50 @@ type Product struct {
 }
 
 type ProductImage struct {
-	ID        uuid.UUID      `json:"id"`
-	ProductID uuid.UUID      `json:"product_id"`
-	Url       string         `json:"url"`
-	AltText   sql.NullString `json:"alt_text"`
-	Position  int16          `json:"position"`
-	IsPrimary bool           `json:"is_primary"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-}
-
-type ProductOption struct {
 	ID        uuid.UUID `json:"id"`
 	ProductID uuid.UUID `json:"product_id"`
-	Name      string    `json:"name"`
+	Url       string    `json:"url"`
+	AltText   *string   `json:"alt_text"`
 	Position  int16     `json:"position"`
+	IsPrimary bool      `json:"is_primary"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type ProductOption struct {
+	ID        uuid.UUID  `json:"id"`
+	ProductID uuid.UUID  `json:"product_id"`
+	Name      string     `json:"name"`
+	Position  int16      `json:"position"`
+	IsActive  bool       `json:"is_active"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	DeletedAt *time.Time `json:"deleted_at"`
+}
+
 type ProductOptionValue struct {
-	ID              uuid.UUID `json:"id"`
-	ProductOptionID uuid.UUID `json:"product_option_id"`
-	Value           string    `json:"value"`
-	Position        int16     `json:"position"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              uuid.UUID  `json:"id"`
+	ProductOptionID uuid.UUID  `json:"product_option_id"`
+	Value           string     `json:"value"`
+	Position        int16      `json:"position"`
+	IsActive        bool       `json:"is_active"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	DeletedAt       *time.Time `json:"deleted_at"`
 }
 
 type ProductVariant struct {
-	ID        uuid.UUID      `json:"id"`
-	ProductID uuid.UUID      `json:"product_id"`
-	ImageID   uuid.NullUUID  `json:"image_id"`
-	Sku       string         `json:"sku"`
-	Price     string         `json:"price"`
-	Stock     int32          `json:"stock"`
-	Weight    sql.NullString `json:"weight"`
-	Status    VariantStatus  `json:"status"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt sql.NullTime   `json:"deleted_at"`
+	ID        uuid.UUID     `json:"id"`
+	ProductID uuid.UUID     `json:"product_id"`
+	ImageID   *uuid.UUID    `json:"image_id"`
+	Sku       string        `json:"sku"`
+	Price     string        `json:"price"`
+	Stock     int32         `json:"stock"`
+	Weight    *string       `json:"weight"`
+	Status    VariantStatus `json:"status"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdatedAt time.Time     `json:"updated_at"`
+	DeletedAt *time.Time    `json:"deleted_at"`
 }
 
 type ProductVariantOptionValue struct {

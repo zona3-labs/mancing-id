@@ -147,21 +147,25 @@ type ProductImage struct {
 }
 
 type ProductOption struct {
-	ID        uuid.UUID `json:"id"`
-	ProductID uuid.UUID `json:"product_id"`
-	Name      string    `json:"name"`
-	Position  int16     `json:"position"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        uuid.UUID    `json:"id"`
+	ProductID uuid.UUID    `json:"product_id"`
+	Name      string       `json:"name"`
+	Position  int16        `json:"position"`
+	IsActive  bool         `json:"is_active"`
+	CreatedAt time.Time    `json:"created_at"`
+	UpdatedAt time.Time    `json:"updated_at"`
+	DeletedAt sql.NullTime `json:"deleted_at"`
 }
 
 type ProductOptionValue struct {
-	ID              uuid.UUID `json:"id"`
-	ProductOptionID uuid.UUID `json:"product_option_id"`
-	Value           string    `json:"value"`
-	Position        int16     `json:"position"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              uuid.UUID    `json:"id"`
+	ProductOptionID uuid.UUID    `json:"product_option_id"`
+	Value           string       `json:"value"`
+	Position        int16        `json:"position"`
+	IsActive        bool         `json:"is_active"`
+	CreatedAt       time.Time    `json:"created_at"`
+	UpdatedAt       time.Time    `json:"updated_at"`
+	DeletedAt       sql.NullTime `json:"deleted_at"`
 }
 
 type ProductVariant struct {

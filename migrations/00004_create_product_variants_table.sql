@@ -10,8 +10,10 @@ CREATE TABLE product_options (
     product_id  UUID         NOT NULL REFERENCES products(id) ON DELETE CASCADE,
     name        VARCHAR(100) NOT NULL,           -- e.g. "Size", "Color", "Material"
     position    SMALLINT     NOT NULL DEFAULT 0, -- display order
+    is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deleted_at  TIMESTAMPTZ
 );
 
 -- -------------------------------------------------------
@@ -25,8 +27,10 @@ CREATE TABLE product_option_values (
     product_option_id UUID         NOT NULL REFERENCES product_options(id) ON DELETE CASCADE,
     value             VARCHAR(100) NOT NULL, -- e.g. "S", "Red", "Cotton"
     position          SMALLINT     NOT NULL DEFAULT 0,
+    is_active         BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deleted_at        TIMESTAMPTZ,
 
     UNIQUE (product_option_id, value)
 );

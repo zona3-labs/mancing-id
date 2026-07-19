@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -95,29 +96,228 @@ func (q *Queries) GetAllProducts(ctx context.Context) ([]Product, error) {
 	return items, nil
 }
 
-const getProductBySlug = `-- name: GetProductBySlug :one
-SELECT id, name, slug, description, short_description, brand_id, status, is_featured, created_at, updated_at, deleted_at
-FROM products
-WHERE slug = $1 AND deleted_at IS NULL
+const getProductDetailByID = `-- name: GetProductDetailByID :many
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.description,
+    p.short_description,
+    p.brand_id,
+    p.status,
+    p.is_featured,
+    p.created_at,
+    p.updated_at,
+    p.deleted_at,
+    po.id          AS option_id,
+    po.name        AS option_name,
+    po.position    AS option_position,
+    po.is_active   AS option_is_active,
+    po.created_at  AS option_created_at,
+    po.updated_at  AS option_updated_at,
+    pov.id         AS value_id,
+    pov.value      AS value_text,
+    pov.position   AS value_position,
+    pov.is_active  AS value_is_active,
+    pov.created_at AS value_created_at,
+    pov.updated_at AS value_updated_at
+FROM products p
+LEFT JOIN product_options po
+    ON po.product_id = p.id
+    AND po.deleted_at IS NULL
+    AND po.is_active = TRUE
+LEFT JOIN product_option_values pov
+    ON pov.product_option_id = po.id
+    AND pov.deleted_at IS NULL
+    AND pov.is_active = TRUE
+WHERE p.id = $1
+  AND p.deleted_at IS NULL
+ORDER BY po.position ASC, po.created_at ASC, pov.position ASC, pov.created_at ASC
 `
 
-func (q *Queries) GetProductBySlug(ctx context.Context, slug string) (Product, error) {
-	row := q.db.QueryRowContext(ctx, getProductBySlug, slug)
-	var i Product
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Slug,
-		&i.Description,
-		&i.ShortDescription,
-		&i.BrandID,
-		&i.Status,
-		&i.IsFeatured,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return i, err
+type GetProductDetailByIDRow struct {
+	ID               uuid.UUID      `json:"id"`
+	Name             string         `json:"name"`
+	Slug             string         `json:"slug"`
+	Description      *string        `json:"description"`
+	ShortDescription *string        `json:"short_description"`
+	BrandID          *uuid.UUID     `json:"brand_id"`
+	Status           ProductStatus  `json:"status"`
+	IsFeatured       bool           `json:"is_featured"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	DeletedAt        *time.Time     `json:"deleted_at"`
+	OptionID         uuid.NullUUID  `json:"option_id"`
+	OptionName       sql.NullString `json:"option_name"`
+	OptionPosition   sql.NullInt16  `json:"option_position"`
+	OptionIsActive   sql.NullBool   `json:"option_is_active"`
+	OptionCreatedAt  sql.NullTime   `json:"option_created_at"`
+	OptionUpdatedAt  sql.NullTime   `json:"option_updated_at"`
+	ValueID          uuid.NullUUID  `json:"value_id"`
+	ValueText        sql.NullString `json:"value_text"`
+	ValuePosition    sql.NullInt16  `json:"value_position"`
+	ValueIsActive    sql.NullBool   `json:"value_is_active"`
+	ValueCreatedAt   sql.NullTime   `json:"value_created_at"`
+	ValueUpdatedAt   sql.NullTime   `json:"value_updated_at"`
+}
+
+func (q *Queries) GetProductDetailByID(ctx context.Context, id uuid.UUID) ([]GetProductDetailByIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, getProductDetailByID, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetProductDetailByIDRow{}
+	for rows.Next() {
+		var i GetProductDetailByIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.ShortDescription,
+			&i.BrandID,
+			&i.Status,
+			&i.IsFeatured,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.OptionID,
+			&i.OptionName,
+			&i.OptionPosition,
+			&i.OptionIsActive,
+			&i.OptionCreatedAt,
+			&i.OptionUpdatedAt,
+			&i.ValueID,
+			&i.ValueText,
+			&i.ValuePosition,
+			&i.ValueIsActive,
+			&i.ValueCreatedAt,
+			&i.ValueUpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getProductDetailBySlug = `-- name: GetProductDetailBySlug :many
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.description,
+    p.short_description,
+    p.brand_id,
+    p.status,
+    p.is_featured,
+    p.created_at,
+    p.updated_at,
+    p.deleted_at,
+    po.id          AS option_id,
+    po.name        AS option_name,
+    po.position    AS option_position,
+    po.is_active   AS option_is_active,
+    po.created_at  AS option_created_at,
+    po.updated_at  AS option_updated_at,
+    pov.id         AS value_id,
+    pov.value      AS value_text,
+    pov.position   AS value_position,
+    pov.is_active  AS value_is_active,
+    pov.created_at AS value_created_at,
+    pov.updated_at AS value_updated_at
+FROM products p
+LEFT JOIN product_options po
+    ON po.product_id = p.id
+    AND po.deleted_at IS NULL
+    AND po.is_active = TRUE
+LEFT JOIN product_option_values pov
+    ON pov.product_option_id = po.id
+    AND pov.deleted_at IS NULL
+    AND pov.is_active = TRUE
+WHERE p.slug = $1
+  AND p.deleted_at IS NULL
+ORDER BY po.position ASC, po.created_at ASC, pov.position ASC, pov.created_at ASC
+`
+
+type GetProductDetailBySlugRow struct {
+	ID               uuid.UUID      `json:"id"`
+	Name             string         `json:"name"`
+	Slug             string         `json:"slug"`
+	Description      *string        `json:"description"`
+	ShortDescription *string        `json:"short_description"`
+	BrandID          *uuid.UUID     `json:"brand_id"`
+	Status           ProductStatus  `json:"status"`
+	IsFeatured       bool           `json:"is_featured"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	DeletedAt        *time.Time     `json:"deleted_at"`
+	OptionID         uuid.NullUUID  `json:"option_id"`
+	OptionName       sql.NullString `json:"option_name"`
+	OptionPosition   sql.NullInt16  `json:"option_position"`
+	OptionIsActive   sql.NullBool   `json:"option_is_active"`
+	OptionCreatedAt  sql.NullTime   `json:"option_created_at"`
+	OptionUpdatedAt  sql.NullTime   `json:"option_updated_at"`
+	ValueID          uuid.NullUUID  `json:"value_id"`
+	ValueText        sql.NullString `json:"value_text"`
+	ValuePosition    sql.NullInt16  `json:"value_position"`
+	ValueIsActive    sql.NullBool   `json:"value_is_active"`
+	ValueCreatedAt   sql.NullTime   `json:"value_created_at"`
+	ValueUpdatedAt   sql.NullTime   `json:"value_updated_at"`
+}
+
+func (q *Queries) GetProductDetailBySlug(ctx context.Context, slug string) ([]GetProductDetailBySlugRow, error) {
+	rows, err := q.db.QueryContext(ctx, getProductDetailBySlug, slug)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetProductDetailBySlugRow{}
+	for rows.Next() {
+		var i GetProductDetailBySlugRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.ShortDescription,
+			&i.BrandID,
+			&i.Status,
+			&i.IsFeatured,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.OptionID,
+			&i.OptionName,
+			&i.OptionPosition,
+			&i.OptionIsActive,
+			&i.OptionCreatedAt,
+			&i.OptionUpdatedAt,
+			&i.ValueID,
+			&i.ValueText,
+			&i.ValuePosition,
+			&i.ValueIsActive,
+			&i.ValueCreatedAt,
+			&i.ValueUpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateProduct = `-- name: UpdateProduct :exec

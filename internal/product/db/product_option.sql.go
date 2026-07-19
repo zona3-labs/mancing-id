@@ -10,13 +10,73 @@ import (
 	"database/sql"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
+
+const bulkCreateProductOptionValues = `-- name: BulkCreateProductOptionValues :many
+INSERT INTO product_option_values (id, product_option_id, value, position, is_active, created_at, updated_at)
+SELECT
+    UNNEST($1::uuid[]),
+    $2::uuid,
+    UNNEST($3::varchar[]),
+    UNNEST($4::smallint[]),
+    UNNEST($5::boolean[]),
+    NOW(),
+    NOW()
+RETURNING id, product_option_id, value, position, is_active, created_at, updated_at, deleted_at
+`
+
+type BulkCreateProductOptionValuesParams struct {
+	Column1 []uuid.UUID `json:"column_1"`
+	Column2 uuid.UUID   `json:"column_2"`
+	Column3 []string    `json:"column_3"`
+	Column4 []int16     `json:"column_4"`
+	Column5 []bool      `json:"column_5"`
+}
+
+func (q *Queries) BulkCreateProductOptionValues(ctx context.Context, arg BulkCreateProductOptionValuesParams) ([]ProductOptionValue, error) {
+	rows, err := q.db.QueryContext(ctx, bulkCreateProductOptionValues,
+		pq.Array(arg.Column1),
+		arg.Column2,
+		pq.Array(arg.Column3),
+		pq.Array(arg.Column4),
+		pq.Array(arg.Column5),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProductOptionValue{}
+	for rows.Next() {
+		var i ProductOptionValue
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProductOptionID,
+			&i.Value,
+			&i.Position,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const createProductOption = `-- name: CreateProductOption :one
 
-INSERT INTO product_options (id, product_id, name, position, created_at, updated_at)
-VALUES ($1, $2, $3, $4, NOW(), NOW())
-RETURNING id, product_id, name, position, created_at, updated_at
+INSERT INTO product_options (id, product_id, name, position, is_active, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+RETURNING id, product_id, name, position, is_active, created_at, updated_at, deleted_at
 `
 
 type CreateProductOptionParams struct {
@@ -24,6 +84,7 @@ type CreateProductOptionParams struct {
 	ProductID uuid.UUID `json:"product_id"`
 	Name      string    `json:"name"`
 	Position  int16     `json:"position"`
+	IsActive  bool      `json:"is_active"`
 }
 
 // -------------------------------------------------------
@@ -35,6 +96,7 @@ func (q *Queries) CreateProductOption(ctx context.Context, arg CreateProductOpti
 		arg.ProductID,
 		arg.Name,
 		arg.Position,
+		arg.IsActive,
 	)
 	var i ProductOption
 	err := row.Scan(
@@ -42,17 +104,19 @@ func (q *Queries) CreateProductOption(ctx context.Context, arg CreateProductOpti
 		&i.ProductID,
 		&i.Name,
 		&i.Position,
+		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const createProductOptionValue = `-- name: CreateProductOptionValue :one
 
-INSERT INTO product_option_values (id, product_option_id, value, position, created_at, updated_at)
-VALUES ($1, $2, $3, $4, NOW(), NOW())
-RETURNING id, product_option_id, value, position, created_at, updated_at
+INSERT INTO product_option_values (id, product_option_id, value, position, is_active, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+RETURNING id, product_option_id, value, position, is_active, created_at, updated_at, deleted_at
 `
 
 type CreateProductOptionValueParams struct {
@@ -60,6 +124,7 @@ type CreateProductOptionValueParams struct {
 	ProductOptionID uuid.UUID `json:"product_option_id"`
 	Value           string    `json:"value"`
 	Position        int16     `json:"position"`
+	IsActive        bool      `json:"is_active"`
 }
 
 // -------------------------------------------------------
@@ -71,6 +136,7 @@ func (q *Queries) CreateProductOptionValue(ctx context.Context, arg CreateProduc
 		arg.ProductOptionID,
 		arg.Value,
 		arg.Position,
+		arg.IsActive,
 	)
 	var i ProductOptionValue
 	err := row.Scan(
@@ -78,15 +144,20 @@ func (q *Queries) CreateProductOptionValue(ctx context.Context, arg CreateProduc
 		&i.ProductOptionID,
 		&i.Value,
 		&i.Position,
+		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const deleteProductOption = `-- name: DeleteProductOption :execresult
-DELETE FROM product_options
+UPDATE product_options
+SET deleted_at = NOW(),
+    updated_at = NOW()
 WHERE id = $1
+  AND deleted_at IS NULL
 `
 
 func (q *Queries) DeleteProductOption(ctx context.Context, id uuid.UUID) (sql.Result, error) {
@@ -94,8 +165,11 @@ func (q *Queries) DeleteProductOption(ctx context.Context, id uuid.UUID) (sql.Re
 }
 
 const deleteProductOptionValue = `-- name: DeleteProductOptionValue :execresult
-DELETE FROM product_option_values
+UPDATE product_option_values
+SET deleted_at = NOW(),
+    updated_at = NOW()
 WHERE id = $1
+  AND deleted_at IS NULL
 `
 
 func (q *Queries) DeleteProductOptionValue(ctx context.Context, id uuid.UUID) (sql.Result, error) {
@@ -103,9 +177,10 @@ func (q *Queries) DeleteProductOptionValue(ctx context.Context, id uuid.UUID) (s
 }
 
 const getProductOptionByID = `-- name: GetProductOptionByID :one
-SELECT id, product_id, name, position, created_at, updated_at
+SELECT id, product_id, name, position, is_active, created_at, updated_at, deleted_at
 FROM product_options
 WHERE id = $1
+  AND deleted_at IS NULL
 `
 
 func (q *Queries) GetProductOptionByID(ctx context.Context, id uuid.UUID) (ProductOption, error) {
@@ -116,16 +191,19 @@ func (q *Queries) GetProductOptionByID(ctx context.Context, id uuid.UUID) (Produ
 		&i.ProductID,
 		&i.Name,
 		&i.Position,
+		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getProductOptionValueByID = `-- name: GetProductOptionValueByID :one
-SELECT id, product_option_id, value, position, created_at, updated_at
+SELECT id, product_option_id, value, position, is_active, created_at, updated_at, deleted_at
 FROM product_option_values
 WHERE id = $1
+  AND deleted_at IS NULL
 `
 
 func (q *Queries) GetProductOptionValueByID(ctx context.Context, id uuid.UUID) (ProductOptionValue, error) {
@@ -136,16 +214,19 @@ func (q *Queries) GetProductOptionValueByID(ctx context.Context, id uuid.UUID) (
 		&i.ProductOptionID,
 		&i.Value,
 		&i.Position,
+		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getProductOptionValuesByOptionID = `-- name: GetProductOptionValuesByOptionID :many
-SELECT id, product_option_id, value, position, created_at, updated_at
+SELECT id, product_option_id, value, position, is_active, created_at, updated_at, deleted_at
 FROM product_option_values
 WHERE product_option_id = $1
+  AND deleted_at IS NULL
 ORDER BY position ASC, created_at ASC
 `
 
@@ -163,8 +244,10 @@ func (q *Queries) GetProductOptionValuesByOptionID(ctx context.Context, productO
 			&i.ProductOptionID,
 			&i.Value,
 			&i.Position,
+			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -180,9 +263,10 @@ func (q *Queries) GetProductOptionValuesByOptionID(ctx context.Context, productO
 }
 
 const getProductOptionsByProductID = `-- name: GetProductOptionsByProductID :many
-SELECT id, product_id, name, position, created_at, updated_at
+SELECT id, product_id, name, position, is_active, created_at, updated_at, deleted_at
 FROM product_options
 WHERE product_id = $1
+  AND deleted_at IS NULL
 ORDER BY position ASC, created_at ASC
 `
 
@@ -200,8 +284,10 @@ func (q *Queries) GetProductOptionsByProductID(ctx context.Context, productID uu
 			&i.ProductID,
 			&i.Name,
 			&i.Position,
+			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -220,27 +306,37 @@ const updateProductOption = `-- name: UpdateProductOption :one
 UPDATE product_options
 SET name       = $2,
     position   = $3,
+    is_active  = $4,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, product_id, name, position, created_at, updated_at
+  AND deleted_at IS NULL
+RETURNING id, product_id, name, position, is_active, created_at, updated_at, deleted_at
 `
 
 type UpdateProductOptionParams struct {
 	ID       uuid.UUID `json:"id"`
 	Name     string    `json:"name"`
 	Position int16     `json:"position"`
+	IsActive bool      `json:"is_active"`
 }
 
 func (q *Queries) UpdateProductOption(ctx context.Context, arg UpdateProductOptionParams) (ProductOption, error) {
-	row := q.db.QueryRowContext(ctx, updateProductOption, arg.ID, arg.Name, arg.Position)
+	row := q.db.QueryRowContext(ctx, updateProductOption,
+		arg.ID,
+		arg.Name,
+		arg.Position,
+		arg.IsActive,
+	)
 	var i ProductOption
 	err := row.Scan(
 		&i.ID,
 		&i.ProductID,
 		&i.Name,
 		&i.Position,
+		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
