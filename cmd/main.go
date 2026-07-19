@@ -9,6 +9,10 @@ import (
 	"github.com/zone3-labs/mancing-id/internal/upload"
 )
 
+// @title           Mancing ID API
+// @version         1.0
+// @description     This is the API server for Mancing ID.
+// @BasePath        /api/v1
 func main() {
 	cfg := config.InitConfig()
 

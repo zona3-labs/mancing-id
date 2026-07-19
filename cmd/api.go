@@ -9,6 +9,10 @@ import (
 
 	"github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	_ "github.com/zone3-labs/mancing-id/docs"
 	"github.com/zone3-labs/mancing-id/internal/brand"
 	"github.com/zone3-labs/mancing-id/internal/category"
 	"github.com/zone3-labs/mancing-id/internal/config"
@@ -31,6 +35,8 @@ func (app *application) mount() http.Handler {
 		gin.Recovery(),
 		requestid.New(),
 	)
+
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	api := router.Group("/api")
 

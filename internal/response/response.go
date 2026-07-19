@@ -9,10 +9,17 @@ import (
 
 // Envelope is the standard API response wrapper for all endpoints.
 type Envelope struct {
-	Success   bool   `json:"success"`
+	Success   bool   `json:"success" example:"true"`
 	Message   string `json:"message,omitempty"`
 	Data      any    `json:"data,omitempty"`
 	Error     string `json:"error,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
+}
+
+// ErrorEnvelope is the standard API response wrapper for error responses.
+type ErrorEnvelope struct {
+	Success   bool   `json:"success" example:"false"`
+	Error     string `json:"error"`
 	RequestID string `json:"request_id,omitempty"`
 }
 

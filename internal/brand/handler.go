@@ -40,6 +40,17 @@ type updateBrandRequest struct {
 	IsActive bool    `json:"is_active"`
 }
 
+// CreateBrand godoc
+// @Summary      Create a new brand
+// @Description  Create a new brand with name, slug, and logo path
+// @Tags         brands
+// @Accept       json
+// @Produce      json
+// @Param        request body createBrandRequest true "Brand details"
+// @Success      201  {object}  response.Envelope{data=Brand}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /brands [post]
 func (h *BrandHandler) CreateBrand(c *gin.Context) {
 	var req createBrandRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -61,6 +72,14 @@ func (h *BrandHandler) CreateBrand(c *gin.Context) {
 	response.Created(c, brand)
 }
 
+// GetAllBrand godoc
+// @Summary      Get all brands
+// @Description  Retrieve all registered brands
+// @Tags         brands
+// @Produce      json
+// @Success      200  {object}  response.Envelope{data=[]Brand}
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /brands [get]
 func (h *BrandHandler) GetAllBrand(c *gin.Context) {
 	brands, err := h.usecase.GetAllBrand(c.Request.Context())
 	if err != nil {
@@ -71,6 +90,16 @@ func (h *BrandHandler) GetAllBrand(c *gin.Context) {
 	response.OK(c, "brands retrieved successfully", brands)
 }
 
+// GetBrandBySlug godoc
+// @Summary      Get brand by slug
+// @Description  Get brand details by its unique URL slug
+// @Tags         brands
+// @Produce      json
+// @Param        slug  path      string  true  "Brand Slug"
+// @Success      200  {object}  response.Envelope{data=Brand}
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /brands/{slug} [get]
 func (h *BrandHandler) GetBrandBySlug(c *gin.Context) {
 	slug := c.Param("slug")
 
@@ -87,6 +116,19 @@ func (h *BrandHandler) GetBrandBySlug(c *gin.Context) {
 	response.OK(c, "brand retrieved successfully", brand)
 }
 
+// UpdateBrand godoc
+// @Summary      Update a brand
+// @Description  Update details of an existing brand by its ID
+// @Tags         brands
+// @Accept       json
+// @Produce      json
+// @Param        id    path      string                 true  "Brand ID (UUID)"
+// @Param        request body updateBrandRequest true  "Updated brand details"
+// @Success      200  {object}  response.Envelope{data=Brand}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /brands/{id} [put]
 func (h *BrandHandler) UpdateBrand(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -120,6 +162,17 @@ func (h *BrandHandler) UpdateBrand(c *gin.Context) {
 	response.OK(c, "brand updated successfully", brand)
 }
 
+// DeleteBrand godoc
+// @Summary      Delete a brand
+// @Description  Soft delete an existing brand by its ID
+// @Tags         brands
+// @Produce      json
+// @Param        id    path      string  true  "Brand ID (UUID)"
+// @Success      204  "No Content"
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /brands/{id} [delete]
 func (h *BrandHandler) DeleteBrand(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -139,6 +192,19 @@ func (h *BrandHandler) DeleteBrand(c *gin.Context) {
 	response.NoContent(c)
 }
 
+// UploadBrandLogo godoc
+// @Summary      Upload brand logo
+// @Description  Upload logo image for an existing brand
+// @Tags         brands
+// @Accept       multipart/form-data
+// @Produce      json
+// @Param        id    path      string  true  "Brand ID (UUID)"
+// @Param        logo  formData  file    true  "Logo image file"
+// @Success      200  {object}  response.Envelope{data=map[string]string} "logo_path response"
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /brands/{id}/logo [post]
 func (h *BrandHandler) UploadBrandLogo(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {

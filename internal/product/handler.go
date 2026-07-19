@@ -74,6 +74,17 @@ type updateProductRequest struct {
 	IsFeature        bool          `json:"is_feature"`
 }
 
+// CreateProduct godoc
+// @Summary      Create a new product
+// @Description  Create a new product with basic details
+// @Tags         products
+// @Accept       json
+// @Produce      json
+// @Param        request body createProductRequest true "Product details"
+// @Success      201  {object}  response.Envelope{data=Product}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products [post]
 func (h *ProductHandler) CreateProduct(c *gin.Context) {
 	var req createProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -99,6 +110,14 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 	response.Created(c, product)
 }
 
+// GetAllProducts godoc
+// @Summary      Get all products
+// @Description  Retrieve all products
+// @Tags         products
+// @Produce      json
+// @Success      200  {object}  response.Envelope{data=[]Product}
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products [get]
 func (h *ProductHandler) GetAllProducts(c *gin.Context) {
 	products, err := h.usecase.GetAllProducts(c.Request.Context())
 	if err != nil {
@@ -109,6 +128,16 @@ func (h *ProductHandler) GetAllProducts(c *gin.Context) {
 	response.OK(c, "products retrieved successfully", products)
 }
 
+// GetProductBySlug godoc
+// @Summary      Get product by slug
+// @Description  Get product details by unique slug
+// @Tags         products
+// @Produce      json
+// @Param        slug  path      string  true  "Product Slug"
+// @Success      200  {object}  response.Envelope{data=ProductDetail}
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/slug/{slug} [get]
 func (h *ProductHandler) GetProductBySlug(c *gin.Context) {
 	slug := c.Param("slug")
 
@@ -125,6 +154,17 @@ func (h *ProductHandler) GetProductBySlug(c *gin.Context) {
 	response.OK(c, "product retrieved successfully", detail)
 }
 
+// GetProductByID godoc
+// @Summary      Get product by ID
+// @Description  Get full product details including options, images, and variants by product ID
+// @Tags         products
+// @Produce      json
+// @Param        id  path      string  true  "Product ID (UUID)"
+// @Success      200  {object}  response.Envelope{data=ProductDetail}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id} [get]
 func (h *ProductHandler) GetProductByID(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -145,6 +185,19 @@ func (h *ProductHandler) GetProductByID(c *gin.Context) {
 	response.OK(c, "product retrieved successfully", detail)
 }
 
+// UpdateProduct godoc
+// @Summary      Update a product
+// @Description  Update details of an existing product
+// @Tags         products
+// @Accept       json
+// @Produce      json
+// @Param        id    path      string                 true  "Product ID (UUID)"
+// @Param        request body updateProductRequest true  "Updated product details"
+// @Success      200  {object}  response.Envelope{data=Product}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id} [put]
 func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -181,6 +234,17 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 	response.OK(c, "product updated successfully", product)
 }
 
+// DeleteProduct godoc
+// @Summary      Delete a product
+// @Description  Soft delete an existing product by its ID
+// @Tags         products
+// @Produce      json
+// @Param        id    path      string  true  "Product ID (UUID)"
+// @Success      204  "No Content"
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id} [delete]
 func (h *ProductHandler) DeleteProduct(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -223,6 +287,19 @@ type updateProductOptionRequest struct {
 	IsActive bool   `json:"is_active"`
 }
 
+// CreateProductOption godoc
+// @Summary      Create product option
+// @Description  Create a new option (e.g. Size, Color) with values for a product
+// @Tags         products
+// @Accept       json
+// @Produce      json
+// @Param        id    path      string                     true  "Product ID (UUID)"
+// @Param        request body createProductOptionRequest true  "Product option details"
+// @Success      201  {object}  response.Envelope{data=ProductOptionWithValues}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id}/options [post]
 func (h *ProductHandler) CreateProductOption(c *gin.Context) {
 	productID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -265,6 +342,16 @@ func (h *ProductHandler) CreateProductOption(c *gin.Context) {
 	response.Created(c, result)
 }
 
+// GetProductOptions godoc
+// @Summary      Get product options
+// @Description  Get all options and their values for a specific product
+// @Tags         products
+// @Produce      json
+// @Param        id  path      string  true  "Product ID (UUID)"
+// @Success      200  {object}  response.Envelope{data=[]ProductOptionWithValues}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id}/options [get]
 func (h *ProductHandler) GetProductOptions(c *gin.Context) {
 	productID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -281,6 +368,20 @@ func (h *ProductHandler) GetProductOptions(c *gin.Context) {
 	response.OK(c, "options retrieved successfully", options)
 }
 
+// UpdateProductOption godoc
+// @Summary      Update product option
+// @Description  Update details of an existing product option
+// @Tags         products
+// @Accept       json
+// @Produce      json
+// @Param        id        path      string                     true  "Product ID (UUID)"
+// @Param        optionId  path      string                     true  "Option ID (UUID)"
+// @Param        request   body      updateProductOptionRequest true  "Updated option details"
+// @Success      200  {object}  response.Envelope{data=ProductOption}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id}/options/{optionId} [put]
 func (h *ProductHandler) UpdateProductOption(c *gin.Context) {
 	optionID, err := uuid.Parse(c.Param("optionId"))
 	if err != nil {
@@ -314,6 +415,18 @@ func (h *ProductHandler) UpdateProductOption(c *gin.Context) {
 	response.OK(c, "option updated successfully", result)
 }
 
+// DeleteProductOption godoc
+// @Summary      Delete product option
+// @Description  Soft delete a product option
+// @Tags         products
+// @Produce      json
+// @Param        id        path      string  true  "Product ID (UUID)"
+// @Param        optionId  path      string  true  "Option ID (UUID)"
+// @Success      204  "No Content"
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id}/options/{optionId} [delete]
 func (h *ProductHandler) DeleteProductOption(c *gin.Context) {
 	optionID, err := uuid.Parse(c.Param("optionId"))
 	if err != nil {
@@ -343,6 +456,19 @@ type createProductOptionValueRequest struct {
 	IsActive bool   `json:"is_active"`
 }
 
+// CreateProductOptionValue godoc
+// @Summary      Create product option value
+// @Description  Create a new value for a specific product option
+// @Tags         products
+// @Accept       json
+// @Produce      json
+// @Param        id        path      string                          true  "Product ID (UUID)"
+// @Param        optionId  path      string                          true  "Option ID (UUID)"
+// @Param        request   body      createProductOptionValueRequest true  "Option value details"
+// @Success      201  {object}  response.Envelope{data=ProductOptionValue}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id}/options/{optionId}/values [post]
 func (h *ProductHandler) CreateProductOptionValue(c *gin.Context) {
 	optionID, err := uuid.Parse(c.Param("optionId"))
 	if err != nil {
@@ -372,6 +498,17 @@ func (h *ProductHandler) CreateProductOptionValue(c *gin.Context) {
 	response.Created(c, result)
 }
 
+// GetProductOptionValues godoc
+// @Summary      Get product option values
+// @Description  Retrieve all values for a specific product option
+// @Tags         products
+// @Produce      json
+// @Param        id        path      string  true  "Product ID (UUID)"
+// @Param        optionId  path      string  true  "Option ID (UUID)"
+// @Success      200  {object}  response.Envelope{data=[]ProductOptionValue}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id}/options/{optionId}/values [get]
 func (h *ProductHandler) GetProductOptionValues(c *gin.Context) {
 	optionID, err := uuid.Parse(c.Param("optionId"))
 	if err != nil {
@@ -388,6 +525,19 @@ func (h *ProductHandler) GetProductOptionValues(c *gin.Context) {
 	response.OK(c, "option values retrieved successfully", values)
 }
 
+// DeleteProductOptionValue godoc
+// @Summary      Delete product option value
+// @Description  Soft delete a product option value
+// @Tags         products
+// @Produce      json
+// @Param        id        path      string  true  "Product ID (UUID)"
+// @Param        optionId  path      string  true  "Option ID (UUID)"
+// @Param        valueId   path      string  true  "Option Value ID (UUID)"
+// @Success      204  "No Content"
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id}/options/{optionId}/values/{valueId} [delete]
 func (h *ProductHandler) DeleteProductOptionValue(c *gin.Context) {
 	valueID, err := uuid.Parse(c.Param("valueId"))
 	if err != nil {
@@ -418,6 +568,19 @@ type createProductImageRequest struct {
 	IsPrimary bool    `json:"is_primary"`
 }
 
+// CreateProductImage godoc
+// @Summary      Create product image
+// @Description  Add a new image associated with a product
+// @Tags         products
+// @Accept       json
+// @Produce      json
+// @Param        id       path      string                     true  "Product ID (UUID)"
+// @Param        request  body      createProductImageRequest  true  "Product image details"
+// @Success      201  {object}  response.Envelope{data=ProductImage}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id}/images [post]
 func (h *ProductHandler) CreateProductImage(c *gin.Context) {
 	productID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -452,6 +615,16 @@ func (h *ProductHandler) CreateProductImage(c *gin.Context) {
 	response.Created(c, result)
 }
 
+// GetProductImages godoc
+// @Summary      Get product images
+// @Description  Retrieve all images associated with a specific product
+// @Tags         products
+// @Produce      json
+// @Param        id  path      string  true  "Product ID (UUID)"
+// @Success      200  {object}  response.Envelope{data=[]ProductImage}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id}/images [get]
 func (h *ProductHandler) GetProductImages(c *gin.Context) {
 	productID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -468,6 +641,18 @@ func (h *ProductHandler) GetProductImages(c *gin.Context) {
 	response.OK(c, "product images retrieved successfully", images)
 }
 
+// SetPrimaryImage godoc
+// @Summary      Set primary product image
+// @Description  Set a specific image as the primary image for a product
+// @Tags         products
+// @Produce      json
+// @Param        id       path      string  true  "Product ID (UUID)"
+// @Param        imageId  path      string  true  "Image ID (UUID)"
+// @Success      204  "No Content"
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id}/images/{imageId}/primary [put]
 func (h *ProductHandler) SetPrimaryImage(c *gin.Context) {
 	productID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -494,6 +679,18 @@ func (h *ProductHandler) SetPrimaryImage(c *gin.Context) {
 	response.NoContent(c)
 }
 
+// DeleteProductImage godoc
+// @Summary      Delete product image
+// @Description  Delete an image association for a product
+// @Tags         products
+// @Produce      json
+// @Param        id       path      string  true  "Product ID (UUID)"
+// @Param        imageId  path      string  true  "Image ID (UUID)"
+// @Success      204  "No Content"
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id}/images/{imageId} [delete]
 func (h *ProductHandler) DeleteProductImage(c *gin.Context) {
 	imageID, err := uuid.Parse(c.Param("imageId"))
 	if err != nil {
@@ -537,6 +734,19 @@ type updateProductVariantRequest struct {
 	ImageID *uuid.UUID    `json:"image_id"`
 }
 
+// CreateProductVariant godoc
+// @Summary      Create product variant
+// @Description  Create a new variant of a product (SKU, price, stock, weight, status, image) and bind option values
+// @Tags         products
+// @Accept       json
+// @Produce      json
+// @Param        id       path      string                       true  "Product ID (UUID)"
+// @Param        request  body      createProductVariantRequest  true  "Product variant details"
+// @Success      201  {object}  response.Envelope{data=ProductVariantDetail}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id}/variants [post]
 func (h *ProductHandler) CreateProductVariant(c *gin.Context) {
 	productID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -586,6 +796,16 @@ func (h *ProductHandler) CreateProductVariant(c *gin.Context) {
 	response.Created(c, result)
 }
 
+// GetProductVariants godoc
+// @Summary      Get product variants
+// @Description  Retrieve all variants associated with a specific product
+// @Tags         products
+// @Produce      json
+// @Param        id  path      string  true  "Product ID (UUID)"
+// @Success      200  {object}  response.Envelope{data=[]ProductVariantDetail}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/{id}/variants [get]
 func (h *ProductHandler) GetProductVariants(c *gin.Context) {
 	productID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -602,6 +822,17 @@ func (h *ProductHandler) GetProductVariants(c *gin.Context) {
 	response.OK(c, "product variants retrieved successfully", variants)
 }
 
+// GetProductVariantByID godoc
+// @Summary      Get product variant by ID
+// @Description  Retrieve details of a product variant by its unique ID
+// @Tags         products
+// @Produce      json
+// @Param        variantId  path      string  true  "Variant ID (UUID)"
+// @Success      200  {object}  response.Envelope{data=ProductVariantDetail}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/variants/{variantId} [get]
 func (h *ProductHandler) GetProductVariantByID(c *gin.Context) {
 	variantID, err := uuid.Parse(c.Param("variantId"))
 	if err != nil {
@@ -622,6 +853,19 @@ func (h *ProductHandler) GetProductVariantByID(c *gin.Context) {
 	response.OK(c, "product variant retrieved successfully", result)
 }
 
+// UpdateProductVariant godoc
+// @Summary      Update product variant
+// @Description  Update details of an existing product variant
+// @Tags         products
+// @Accept       json
+// @Produce      json
+// @Param        variantId  path      string                       true  "Variant ID (UUID)"
+// @Param        request    body      updateProductVariantRequest  true  "Updated variant details"
+// @Success      200  {object}  response.Envelope{data=ProductVariant}
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/variants/{variantId} [put]
 func (h *ProductHandler) UpdateProductVariant(c *gin.Context) {
 	variantID, err := uuid.Parse(c.Param("variantId"))
 	if err != nil {
@@ -667,6 +911,17 @@ func (h *ProductHandler) UpdateProductVariant(c *gin.Context) {
 	response.OK(c, "product variant updated successfully", result)
 }
 
+// DeleteProductVariant godoc
+// @Summary      Delete product variant
+// @Description  Soft delete an existing product variant
+// @Tags         products
+// @Produce      json
+// @Param        variantId  path      string  true  "Variant ID (UUID)"
+// @Success      204  "No Content"
+// @Failure      400  {object}  response.ErrorEnvelope
+// @Failure      404  {object}  response.ErrorEnvelope
+// @Failure      500  {object}  response.ErrorEnvelope
+// @Router       /products/variants/{variantId} [delete]
 func (h *ProductHandler) DeleteProductVariant(c *gin.Context) {
 	variantID, err := uuid.Parse(c.Param("variantId"))
 	if err != nil {

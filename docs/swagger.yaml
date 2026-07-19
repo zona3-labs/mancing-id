@@ -1,0 +1,1669 @@
+basePath: /api/v1
+definitions:
+  brand.Brand:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      logo_path:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  brand.createBrandRequest:
+    properties:
+      logo_path:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+    required:
+    - name
+    type: object
+  brand.updateBrandRequest:
+    properties:
+      is_active:
+        type: boolean
+      logo_path:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+    required:
+    - name
+    type: object
+  category.Category:
+    properties:
+      children:
+        items:
+          $ref: '#/definitions/category.Category'
+        type: array
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      parent_id:
+        type: string
+      slug:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  category.createCategoryRequest:
+    properties:
+      name:
+        type: string
+      parent_id:
+        type: string
+      slug:
+        type: string
+    required:
+    - name
+    type: object
+  category.updateCategoryRequest:
+    properties:
+      is_active:
+        type: boolean
+      name:
+        type: string
+      parent_id:
+        type: string
+      slug:
+        type: string
+    required:
+    - name
+    type: object
+  product.Product:
+    properties:
+      brand_id:
+        type: string
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      is_feature:
+        type: boolean
+      name:
+        type: string
+      short_description:
+        type: string
+      slug:
+        type: string
+      status:
+        $ref: '#/definitions/product.ProductStatus'
+      updated_at:
+        type: string
+    type: object
+  product.ProductDetail:
+    properties:
+      brand_id:
+        type: string
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      images:
+        items:
+          $ref: '#/definitions/product.ProductImage'
+        type: array
+      is_feature:
+        type: boolean
+      name:
+        type: string
+      options:
+        items:
+          $ref: '#/definitions/product.ProductOptionWithValues'
+        type: array
+      short_description:
+        type: string
+      slug:
+        type: string
+      status:
+        $ref: '#/definitions/product.ProductStatus'
+      updated_at:
+        type: string
+      variants:
+        items:
+          $ref: '#/definitions/product.ProductVariantDetail'
+        type: array
+    type: object
+  product.ProductImage:
+    properties:
+      alt_text:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      is_primary:
+        type: boolean
+      position:
+        type: integer
+      product_id:
+        type: string
+      updated_at:
+        type: string
+      url:
+        type: string
+    type: object
+  product.ProductOption:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      position:
+        type: integer
+      product_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  product.ProductOptionValue:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      position:
+        type: integer
+      product_option_id:
+        type: string
+      updated_at:
+        type: string
+      value:
+        type: string
+    type: object
+  product.ProductOptionWithValues:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      position:
+        type: integer
+      product_id:
+        type: string
+      updated_at:
+        type: string
+      values:
+        items:
+          $ref: '#/definitions/product.ProductOptionValue'
+        type: array
+    type: object
+  product.ProductStatus:
+    enum:
+    - draft
+    - active
+    - archived
+    type: string
+    x-enum-varnames:
+    - StatusDraft
+    - StatusActive
+    - StatusArchived
+  product.ProductVariant:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      id:
+        type: string
+      image_id:
+        type: string
+      price:
+        type: string
+      product_id:
+        type: string
+      sku:
+        type: string
+      status:
+        $ref: '#/definitions/product.VariantStatus'
+      stock:
+        type: integer
+      updated_at:
+        type: string
+      weight:
+        type: string
+    type: object
+  product.ProductVariantDetail:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      id:
+        type: string
+      image_id:
+        type: string
+      option_values:
+        items:
+          $ref: '#/definitions/product.ProductOptionValue'
+        type: array
+      price:
+        type: string
+      product_id:
+        type: string
+      sku:
+        type: string
+      status:
+        $ref: '#/definitions/product.VariantStatus'
+      stock:
+        type: integer
+      updated_at:
+        type: string
+      weight:
+        type: string
+    type: object
+  product.VariantStatus:
+    enum:
+    - draft
+    - active
+    - archived
+    type: string
+    x-enum-varnames:
+    - VariantStatusDraft
+    - VariantStatusActive
+    - VariantStatusArchived
+  product.createProductImageRequest:
+    properties:
+      alt_text:
+        type: string
+      is_primary:
+        type: boolean
+      position:
+        type: integer
+      url:
+        type: string
+    required:
+    - url
+    type: object
+  product.createProductOptionRequest:
+    properties:
+      is_active:
+        type: boolean
+      name:
+        type: string
+      position:
+        type: integer
+      values:
+        items:
+          $ref: '#/definitions/product.createProductOptionValueInOptionRequest'
+        type: array
+    required:
+    - name
+    type: object
+  product.createProductOptionValueInOptionRequest:
+    properties:
+      is_active:
+        type: boolean
+      position:
+        type: integer
+      value:
+        type: string
+    required:
+    - value
+    type: object
+  product.createProductOptionValueRequest:
+    properties:
+      is_active:
+        type: boolean
+      position:
+        type: integer
+      value:
+        type: string
+    required:
+    - value
+    type: object
+  product.createProductRequest:
+    properties:
+      brand_id:
+        type: string
+      description:
+        type: string
+      is_feature:
+        type: boolean
+      name:
+        type: string
+      short_description:
+        type: string
+      slug:
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/product.ProductStatus'
+        enum:
+        - draft
+        - active
+        - archived
+    required:
+    - name
+    - status
+    type: object
+  product.createProductVariantRequest:
+    properties:
+      image_id:
+        type: string
+      option_value_ids:
+        items:
+          type: string
+        type: array
+      price:
+        type: string
+      sku:
+        type: string
+      status:
+        $ref: '#/definitions/product.VariantStatus'
+      stock:
+        type: integer
+      weight:
+        type: string
+    required:
+    - price
+    - sku
+    - status
+    type: object
+  product.updateProductOptionRequest:
+    properties:
+      is_active:
+        type: boolean
+      name:
+        type: string
+      position:
+        type: integer
+    required:
+    - name
+    type: object
+  product.updateProductRequest:
+    properties:
+      brand_id:
+        type: string
+      description:
+        type: string
+      is_feature:
+        type: boolean
+      name:
+        type: string
+      short_description:
+        type: string
+      slug:
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/product.ProductStatus'
+        enum:
+        - draft
+        - active
+        - archived
+    required:
+    - name
+    - status
+    type: object
+  product.updateProductVariantRequest:
+    properties:
+      image_id:
+        type: string
+      price:
+        type: string
+      sku:
+        type: string
+      status:
+        $ref: '#/definitions/product.VariantStatus'
+      stock:
+        type: integer
+      weight:
+        type: string
+    required:
+    - price
+    - sku
+    - status
+    type: object
+  response.Envelope:
+    properties:
+      data: {}
+      error:
+        type: string
+      message:
+        type: string
+      request_id:
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  response.ErrorEnvelope:
+    properties:
+      error:
+        type: string
+      request_id:
+        type: string
+      success:
+        example: false
+        type: boolean
+    type: object
+info:
+  contact: {}
+  description: This is the API server for Mancing ID.
+  title: Mancing ID API
+  version: "1.0"
+paths:
+  /brands:
+    get:
+      description: Retrieve all registered brands
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/brand.Brand'
+                  type: array
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Get all brands
+      tags:
+      - brands
+    post:
+      consumes:
+      - application/json
+      description: Create a new brand with name, slug, and logo path
+      parameters:
+      - description: Brand details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/brand.createBrandRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/brand.Brand'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Create a new brand
+      tags:
+      - brands
+  /brands/{id}:
+    delete:
+      description: Soft delete an existing brand by its ID
+      parameters:
+      - description: Brand ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Delete a brand
+      tags:
+      - brands
+    put:
+      consumes:
+      - application/json
+      description: Update details of an existing brand by its ID
+      parameters:
+      - description: Brand ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Updated brand details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/brand.updateBrandRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/brand.Brand'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Update a brand
+      tags:
+      - brands
+  /brands/{id}/logo:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload logo image for an existing brand
+      parameters:
+      - description: Brand ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Logo image file
+        in: formData
+        name: logo
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: logo_path response
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Upload brand logo
+      tags:
+      - brands
+  /brands/{slug}:
+    get:
+      description: Get brand details by its unique URL slug
+      parameters:
+      - description: Brand Slug
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/brand.Brand'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Get brand by slug
+      tags:
+      - brands
+  /categories:
+    get:
+      description: Retrieve all categories in a hierarchical tree structure
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/category.Category'
+                  type: array
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Get all categories
+      tags:
+      - categories
+    post:
+      consumes:
+      - application/json
+      description: Create a new category with optional parent category
+      parameters:
+      - description: Category details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/category.createCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/category.Category'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Create a new category
+      tags:
+      - categories
+  /categories/{id}:
+    delete:
+      description: Soft delete an existing category by its ID
+      parameters:
+      - description: Category ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Delete a category
+      tags:
+      - categories
+    put:
+      consumes:
+      - application/json
+      description: Update details of an existing category by its ID
+      parameters:
+      - description: Category ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Updated category details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/category.updateCategoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/category.Category'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Update a category
+      tags:
+      - categories
+  /categories/{slug}:
+    get:
+      description: Get category details by its unique URL slug
+      parameters:
+      - description: Category Slug
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/category.Category'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Get category by slug
+      tags:
+      - categories
+  /products:
+    get:
+      description: Retrieve all products
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/product.Product'
+                  type: array
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Get all products
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      description: Create a new product with basic details
+      parameters:
+      - description: Product details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/product.createProductRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.Product'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Create a new product
+      tags:
+      - products
+  /products/{id}:
+    delete:
+      description: Soft delete an existing product by its ID
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Delete a product
+      tags:
+      - products
+    get:
+      description: Get full product details including options, images, and variants
+        by product ID
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.ProductDetail'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Get product by ID
+      tags:
+      - products
+    put:
+      consumes:
+      - application/json
+      description: Update details of an existing product
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Updated product details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/product.updateProductRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.Product'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Update a product
+      tags:
+      - products
+  /products/{id}/images:
+    get:
+      description: Retrieve all images associated with a specific product
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/product.ProductImage'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Get product images
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      description: Add a new image associated with a product
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Product image details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/product.createProductImageRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.ProductImage'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Create product image
+      tags:
+      - products
+  /products/{id}/images/{imageId}:
+    delete:
+      description: Delete an image association for a product
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Image ID (UUID)
+        in: path
+        name: imageId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Delete product image
+      tags:
+      - products
+  /products/{id}/images/{imageId}/primary:
+    put:
+      description: Set a specific image as the primary image for a product
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Image ID (UUID)
+        in: path
+        name: imageId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Set primary product image
+      tags:
+      - products
+  /products/{id}/options:
+    get:
+      description: Get all options and their values for a specific product
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/product.ProductOptionWithValues'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Get product options
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      description: Create a new option (e.g. Size, Color) with values for a product
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Product option details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/product.createProductOptionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.ProductOptionWithValues'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Create product option
+      tags:
+      - products
+  /products/{id}/options/{optionId}:
+    delete:
+      description: Soft delete a product option
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Option ID (UUID)
+        in: path
+        name: optionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Delete product option
+      tags:
+      - products
+    put:
+      consumes:
+      - application/json
+      description: Update details of an existing product option
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Option ID (UUID)
+        in: path
+        name: optionId
+        required: true
+        type: string
+      - description: Updated option details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/product.updateProductOptionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.ProductOption'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Update product option
+      tags:
+      - products
+  /products/{id}/options/{optionId}/values:
+    get:
+      description: Retrieve all values for a specific product option
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Option ID (UUID)
+        in: path
+        name: optionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/product.ProductOptionValue'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Get product option values
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      description: Create a new value for a specific product option
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Option ID (UUID)
+        in: path
+        name: optionId
+        required: true
+        type: string
+      - description: Option value details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/product.createProductOptionValueRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.ProductOptionValue'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Create product option value
+      tags:
+      - products
+  /products/{id}/options/{optionId}/values/{valueId}:
+    delete:
+      description: Soft delete a product option value
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Option ID (UUID)
+        in: path
+        name: optionId
+        required: true
+        type: string
+      - description: Option Value ID (UUID)
+        in: path
+        name: valueId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Delete product option value
+      tags:
+      - products
+  /products/{id}/variants:
+    get:
+      description: Retrieve all variants associated with a specific product
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/product.ProductVariantDetail'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Get product variants
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      description: Create a new variant of a product (SKU, price, stock, weight, status,
+        image) and bind option values
+      parameters:
+      - description: Product ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Product variant details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/product.createProductVariantRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.ProductVariantDetail'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Create product variant
+      tags:
+      - products
+  /products/slug/{slug}:
+    get:
+      description: Get product details by unique slug
+      parameters:
+      - description: Product Slug
+        in: path
+        name: slug
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.ProductDetail'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Get product by slug
+      tags:
+      - products
+  /products/variants/{variantId}:
+    delete:
+      description: Soft delete an existing product variant
+      parameters:
+      - description: Variant ID (UUID)
+        in: path
+        name: variantId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Delete product variant
+      tags:
+      - products
+    get:
+      description: Retrieve details of a product variant by its unique ID
+      parameters:
+      - description: Variant ID (UUID)
+        in: path
+        name: variantId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.ProductVariantDetail'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Get product variant by ID
+      tags:
+      - products
+    put:
+      consumes:
+      - application/json
+      description: Update details of an existing product variant
+      parameters:
+      - description: Variant ID (UUID)
+        in: path
+        name: variantId
+        required: true
+        type: string
+      - description: Updated variant details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/product.updateProductVariantRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/product.ProductVariant'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorEnvelope'
+      summary: Update product variant
+      tags:
+      - products
+swagger: "2.0"
