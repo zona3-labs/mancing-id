@@ -5,7 +5,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	"github.com/zone3-labs/mancing-id/internal/config"
+	"github.com/zona3-labs/mancing-id/internal/config"
 )
 
 func NewPostgresDB(config *config.Config) (*sql.DB, error) {

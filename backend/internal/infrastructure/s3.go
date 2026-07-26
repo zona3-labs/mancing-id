@@ -7,7 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/zone3-labs/mancing-id/internal/config"
+	"github.com/zona3-labs/mancing-id/internal/config"
 )
 
 // NewS3Client initialises an AWS S3 client from application config.

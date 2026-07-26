@@ -1,4 +1,4 @@
-module github.com/zone3-labs/mancing-id
+module github.com/zona3-labs/mancing-id
 
 go 1.26.2
 

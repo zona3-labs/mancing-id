@@ -6,8 +6,8 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	dberrors "github.com/zone3-labs/mancing-id/internal/errors"
-	productDb "github.com/zone3-labs/mancing-id/internal/product/db"
+	dberrors "github.com/zona3-labs/mancing-id/internal/errors"
+	productDb "github.com/zona3-labs/mancing-id/internal/product/db"
 )
 
 type productPostgresRepository struct {

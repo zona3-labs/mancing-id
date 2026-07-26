@@ -5,7 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/google/uuid"
-	brandDb "github.com/zone3-labs/mancing-id/internal/brand/db"
+	brandDb "github.com/zona3-labs/mancing-id/internal/brand/db"
 )
 
 type brandPostgresRepository struct {

@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	dberrors "github.com/zone3-labs/mancing-id/internal/errors"
-	"github.com/zone3-labs/mancing-id/internal/util"
+	dberrors "github.com/zona3-labs/mancing-id/internal/errors"
+	"github.com/zona3-labs/mancing-id/internal/util"
 )
 
 type ProductUsecase interface {

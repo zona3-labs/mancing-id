@@ -12,13 +12,13 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
-	_ "github.com/zone3-labs/mancing-id/docs"
-	"github.com/zone3-labs/mancing-id/internal/brand"
-	"github.com/zone3-labs/mancing-id/internal/category"
-	"github.com/zone3-labs/mancing-id/internal/config"
-	"github.com/zone3-labs/mancing-id/internal/product"
-	"github.com/zone3-labs/mancing-id/internal/response"
-	"github.com/zone3-labs/mancing-id/internal/upload"
+	_ "github.com/zona3-labs/mancing-id/docs"
+	"github.com/zona3-labs/mancing-id/internal/brand"
+	"github.com/zona3-labs/mancing-id/internal/category"
+	"github.com/zona3-labs/mancing-id/internal/config"
+	"github.com/zona3-labs/mancing-id/internal/product"
+	"github.com/zona3-labs/mancing-id/internal/response"
+	"github.com/zona3-labs/mancing-id/internal/upload"
 )
 
 type application struct {

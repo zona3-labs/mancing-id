@@ -4,9 +4,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/zone3-labs/mancing-id/internal/config"
-	"github.com/zone3-labs/mancing-id/internal/infrastructure"
-	"github.com/zone3-labs/mancing-id/internal/upload"
+	"github.com/zona3-labs/mancing-id/internal/config"
+	"github.com/zona3-labs/mancing-id/internal/infrastructure"
+	"github.com/zona3-labs/mancing-id/internal/upload"
 )
 
 // @title           Mancing ID API

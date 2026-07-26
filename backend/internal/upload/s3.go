@@ -16,7 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/chai2010/webp"
 	"github.com/google/uuid"
-	"github.com/zone3-labs/mancing-id/internal/config"
+	"github.com/zona3-labs/mancing-id/internal/config"
 )
 
 var (

@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/zone3-labs/mancing-id/internal/response"
+	"github.com/zona3-labs/mancing-id/internal/response"
 )
 
 type CategoryHandler struct {

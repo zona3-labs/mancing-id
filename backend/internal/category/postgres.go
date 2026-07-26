@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	categoryDb "github.com/zone3-labs/mancing-id/internal/category/db"
-	dberrors "github.com/zone3-labs/mancing-id/internal/errors"
+	categoryDb "github.com/zona3-labs/mancing-id/internal/category/db"
+	dberrors "github.com/zona3-labs/mancing-id/internal/errors"
 )
 
 type categoryPostgresRepository struct {

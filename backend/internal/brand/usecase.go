@@ -6,9 +6,9 @@ import (
 	"mime/multipart"
 
 	"github.com/google/uuid"
-	dberrors "github.com/zone3-labs/mancing-id/internal/errors"
-	"github.com/zone3-labs/mancing-id/internal/upload"
-	"github.com/zone3-labs/mancing-id/internal/util"
+	dberrors "github.com/zona3-labs/mancing-id/internal/errors"
+	"github.com/zona3-labs/mancing-id/internal/upload"
+	"github.com/zona3-labs/mancing-id/internal/util"
 )
 
 type BrandUsecase interface {
