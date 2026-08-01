@@ -64,13 +64,24 @@ func (b brandPostgresRepository) GetBrandBySlug(ctx context.Context, slug string
 }
 
 func (b brandPostgresRepository) UpdateBrand(ctx context.Context, brand *Brand) error {
-	return b.queries.UpdateBrand(ctx, brandDb.UpdateBrandParams{
+	result, err := b.queries.UpdateBrand(ctx, brandDb.UpdateBrandParams{
 		ID:       brand.ID,
 		Name:     brand.Name,
 		Slug:     brand.Slug,
 		LogoPath: brand.LogoPath,
 		IsActive: brand.IsActive,
 	})
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrBrandNotFound
+	}
+	return nil
 }
 
 func (b brandPostgresRepository) UpdateBrandLogo(ctx context.Context, id uuid.UUID, logoPath string) error {

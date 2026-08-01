@@ -72,6 +72,7 @@ type updateProductRequest struct {
 	Status           ProductStatus `json:"status" binding:"required,oneof=draft active archived"`
 	BrandID          *uuid.UUID    `json:"brand_id"`
 	IsFeature        bool          `json:"is_feature"`
+	Version          *int64        `json:"version"`
 }
 
 // CreateProduct godoc
@@ -206,8 +207,8 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 	}
 
 	var req updateProductRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+	if err := c.ShouldBindJSON(&req); err != nil || req.Version == nil {
+		response.BadRequest(c, "product version is required")
 		return
 	}
 
@@ -220,11 +221,16 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 		Status:           req.Status,
 		BrandID:          req.BrandID,
 		IsFeature:        req.IsFeature,
+		Version:          *req.Version,
 	}
 
 	if err := h.usecase.UpdateProduct(c.Request.Context(), product); err != nil {
 		if errors.Is(err, ErrProductNotFound) {
 			response.NotFound(c, "product not found")
+			return
+		}
+		if errors.Is(err, ErrProductVersionConflict) {
+			response.Conflict(c, "product was changed by another request")
 			return
 		}
 		response.InternalError(c, err)
@@ -692,13 +698,18 @@ func (h *ProductHandler) SetPrimaryImage(c *gin.Context) {
 // @Failure      500  {object}  response.ErrorEnvelope
 // @Router       /products/{id}/images/{imageId} [delete]
 func (h *ProductHandler) DeleteProductImage(c *gin.Context) {
+	productID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid product id")
+		return
+	}
 	imageID, err := uuid.Parse(c.Param("imageId"))
 	if err != nil {
 		response.BadRequest(c, "invalid image id")
 		return
 	}
 
-	err = h.usecase.DeleteProductImage(c.Request.Context(), imageID)
+	err = h.usecase.DeleteProductImage(c.Request.Context(), productID, imageID)
 	if err != nil {
 		if errors.Is(err, ErrProductImageNotFound) {
 			response.NotFound(c, "product image not found")

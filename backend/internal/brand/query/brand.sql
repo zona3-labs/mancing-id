@@ -13,7 +13,7 @@ SELECT id, name, slug, logo_path, is_active, created_at, updated_at, deleted_at
 FROM brands
 WHERE slug = $1 AND deleted_at IS NULL;
 
--- name: UpdateBrand :exec
+-- name: UpdateBrand :execresult
 UPDATE brands
 SET name = $2,
     slug = $3,

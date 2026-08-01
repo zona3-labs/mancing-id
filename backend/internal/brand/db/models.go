@@ -173,6 +173,7 @@ type Product struct {
 	ShortDescription sql.NullString `json:"short_description"`
 	BrandID          uuid.NullUUID  `json:"brand_id"`
 	Status           ProductStatus  `json:"status"`
+	Version          int64          `json:"version"`
 	IsFeatured       bool           `json:"is_featured"`
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`

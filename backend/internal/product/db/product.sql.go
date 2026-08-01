@@ -55,7 +55,7 @@ func (q *Queries) DeleteProduct(ctx context.Context, id uuid.UUID) (sql.Result, 
 }
 
 const getAllProducts = `-- name: GetAllProducts :many
-SELECT id, name, slug, description, short_description, brand_id, status, is_featured, created_at, updated_at, deleted_at
+SELECT id, name, slug, description, short_description, brand_id, status, version, is_featured, created_at, updated_at, deleted_at
 FROM products
 WHERE deleted_at IS NULL
 ORDER BY created_at DESC
@@ -78,6 +78,7 @@ func (q *Queries) GetAllProducts(ctx context.Context) ([]Product, error) {
 			&i.ShortDescription,
 			&i.BrandID,
 			&i.Status,
+			&i.Version,
 			&i.IsFeatured,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -105,6 +106,7 @@ SELECT
     p.short_description,
     p.brand_id,
     p.status,
+    p.version,
     p.is_featured,
     p.created_at,
     p.updated_at,
@@ -143,6 +145,7 @@ type GetProductDetailByIDRow struct {
 	ShortDescription *string        `json:"short_description"`
 	BrandID          *uuid.UUID     `json:"brand_id"`
 	Status           ProductStatus  `json:"status"`
+	Version          int64          `json:"version"`
 	IsFeatured       bool           `json:"is_featured"`
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
@@ -178,6 +181,7 @@ func (q *Queries) GetProductDetailByID(ctx context.Context, id uuid.UUID) ([]Get
 			&i.ShortDescription,
 			&i.BrandID,
 			&i.Status,
+			&i.Version,
 			&i.IsFeatured,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -217,6 +221,7 @@ SELECT
     p.short_description,
     p.brand_id,
     p.status,
+    p.version,
     p.is_featured,
     p.created_at,
     p.updated_at,
@@ -255,6 +260,7 @@ type GetProductDetailBySlugRow struct {
 	ShortDescription *string        `json:"short_description"`
 	BrandID          *uuid.UUID     `json:"brand_id"`
 	Status           ProductStatus  `json:"status"`
+	Version          int64          `json:"version"`
 	IsFeatured       bool           `json:"is_featured"`
 	CreatedAt        time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
@@ -290,6 +296,7 @@ func (q *Queries) GetProductDetailBySlug(ctx context.Context, slug string) ([]Ge
 			&i.ShortDescription,
 			&i.BrandID,
 			&i.Status,
+			&i.Version,
 			&i.IsFeatured,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -320,7 +327,7 @@ func (q *Queries) GetProductDetailBySlug(ctx context.Context, slug string) ([]Ge
 	return items, nil
 }
 
-const updateProduct = `-- name: UpdateProduct :exec
+const updateProduct = `-- name: UpdateProduct :one
 UPDATE products
 SET name = $2,
     slug = $3,
@@ -329,8 +336,10 @@ SET name = $2,
     status = $6,
     brand_id = $7,
     is_featured = $8,
+    version = version + 1,
     updated_at = NOW()
-WHERE id = $1 AND deleted_at IS NULL
+WHERE id = $1 AND version = $9 AND deleted_at IS NULL
+RETURNING id, name, slug, description, short_description, brand_id, status, version, is_featured, created_at, updated_at, deleted_at
 `
 
 type UpdateProductParams struct {
@@ -342,10 +351,11 @@ type UpdateProductParams struct {
 	Status           ProductStatus `json:"status"`
 	BrandID          *uuid.UUID    `json:"brand_id"`
 	IsFeatured       bool          `json:"is_featured"`
+	Version          int64         `json:"version"`
 }
 
-func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) error {
-	_, err := q.db.ExecContext(ctx, updateProduct,
+func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error) {
+	row := q.db.QueryRowContext(ctx, updateProduct,
 		arg.ID,
 		arg.Name,
 		arg.Slug,
@@ -354,6 +364,22 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) er
 		arg.Status,
 		arg.BrandID,
 		arg.IsFeatured,
+		arg.Version,
 	)
-	return err
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.ShortDescription,
+		&i.BrandID,
+		&i.Status,
+		&i.Version,
+		&i.IsFeatured,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }

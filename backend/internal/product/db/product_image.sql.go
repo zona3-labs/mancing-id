@@ -52,11 +52,16 @@ func (q *Queries) CreateProductImage(ctx context.Context, arg CreateProductImage
 
 const deleteProductImage = `-- name: DeleteProductImage :execresult
 DELETE FROM product_images
-WHERE id = $1
+WHERE product_id = $1 AND id = $2
 `
 
-func (q *Queries) DeleteProductImage(ctx context.Context, id uuid.UUID) (sql.Result, error) {
-	return q.db.ExecContext(ctx, deleteProductImage, id)
+type DeleteProductImageParams struct {
+	ProductID uuid.UUID `json:"product_id"`
+	ID        uuid.UUID `json:"id"`
+}
+
+func (q *Queries) DeleteProductImage(ctx context.Context, arg DeleteProductImageParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, deleteProductImage, arg.ProductID, arg.ID)
 }
 
 const getProductImageByID = `-- name: GetProductImageByID :one
@@ -121,10 +126,15 @@ func (q *Queries) GetProductImagesByProductID(ctx context.Context, productID uui
 }
 
 const setPrimaryImage = `-- name: SetPrimaryImage :execresult
-UPDATE product_images
-SET is_primary = CASE WHEN id = $2 THEN TRUE ELSE FALSE END,
+UPDATE product_images AS image
+SET is_primary = CASE WHEN image.id = $2 THEN TRUE ELSE FALSE END,
     updated_at = NOW()
-WHERE product_id = $1
+WHERE image.product_id = $1
+  AND EXISTS (
+      SELECT 1
+      FROM product_images target
+      WHERE target.id = $2 AND target.product_id = $1
+  )
 `
 
 type SetPrimaryImageParams struct {

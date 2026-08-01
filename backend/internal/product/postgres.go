@@ -47,6 +47,7 @@ func (p productPostgresRepository) GetAllProducts(ctx context.Context) ([]*Produ
 			ShortDescription: row.ShortDescription,
 			BrandID:          row.BrandID,
 			Status:           ProductStatus(row.Status),
+			Version:          row.Version,
 			IsFeature:        row.IsFeatured,
 			CreatedAt:        row.CreatedAt,
 			UpdatedAt:        row.UpdatedAt,
@@ -75,6 +76,7 @@ func (p productPostgresRepository) GetProductBySlug(ctx context.Context, slug st
 			ShortDescription: first.ShortDescription,
 			BrandID:          first.BrandID,
 			Status:           ProductStatus(first.Status),
+			Version:          first.Version,
 			IsFeature:        first.IsFeatured,
 			CreatedAt:        first.CreatedAt,
 			UpdatedAt:        first.UpdatedAt,
@@ -163,6 +165,7 @@ func (p productPostgresRepository) GetProductDetailByID(ctx context.Context, id 
 			ShortDescription: first.ShortDescription,
 			BrandID:          first.BrandID,
 			Status:           ProductStatus(first.Status),
+			Version:          first.Version,
 			IsFeature:        first.IsFeatured,
 			CreatedAt:        first.CreatedAt,
 			UpdatedAt:        first.UpdatedAt,
@@ -233,7 +236,7 @@ func (p productPostgresRepository) GetProductDetailByID(ctx context.Context, id 
 }
 
 func (p productPostgresRepository) UpdateProduct(ctx context.Context, product *Product) error {
-	return p.queries.UpdateProduct(ctx, productDb.UpdateProductParams{
+	row, err := p.queries.UpdateProduct(ctx, productDb.UpdateProductParams{
 		ID:               product.ID,
 		Name:             product.Name,
 		Slug:             product.Slug,
@@ -242,7 +245,23 @@ func (p productPostgresRepository) UpdateProduct(ctx context.Context, product *P
 		Status:           productDb.ProductStatus(product.Status),
 		BrandID:          product.BrandID,
 		IsFeatured:       product.IsFeature,
+		Version:          product.Version,
 	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			current, lookupErr := p.GetProductDetailByID(ctx, product.ID)
+			if lookupErr != nil {
+				return lookupErr
+			}
+			if current.Version != product.Version {
+				return ErrProductVersionConflict
+			}
+			return ErrProductNotFound
+		}
+		return err
+	}
+	*product = *mapProduct(row)
+	return nil
 }
 
 func (p productPostgresRepository) DeleteProduct(ctx context.Context, id uuid.UUID) error {
@@ -464,15 +483,25 @@ func (p productPostgresRepository) GetProductImageByID(ctx context.Context, id u
 }
 
 func (p productPostgresRepository) SetPrimaryImage(ctx context.Context, productID uuid.UUID, imageID uuid.UUID) error {
-	_, err := p.queries.SetPrimaryImage(ctx, productDb.SetPrimaryImageParams{
+	result, err := p.queries.SetPrimaryImage(ctx, productDb.SetPrimaryImageParams{
 		ProductID: productID,
 		ID:        imageID,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrProductImageNotFound
+	}
+	return nil
 }
 
-func (p productPostgresRepository) DeleteProductImage(ctx context.Context, id uuid.UUID) error {
-	result, err := p.queries.DeleteProductImage(ctx, id)
+func (p productPostgresRepository) DeleteProductImage(ctx context.Context, productID, imageID uuid.UUID) error {
+	result, err := p.queries.DeleteProductImage(ctx, productDb.DeleteProductImageParams{ProductID: productID, ID: imageID})
 	if err != nil {
 		return err
 	}
@@ -526,6 +555,23 @@ func mapProductImage(row productDb.ProductImage) *ProductImage {
 		IsPrimary: row.IsPrimary,
 		CreatedAt: row.CreatedAt,
 		UpdatedAt: row.UpdatedAt,
+	}
+}
+
+func mapProduct(row productDb.Product) *Product {
+	return &Product{
+		ID:               row.ID,
+		Name:             row.Name,
+		Slug:             row.Slug,
+		Description:      row.Description,
+		ShortDescription: row.ShortDescription,
+		BrandID:          row.BrandID,
+		Status:           ProductStatus(row.Status),
+		Version:          row.Version,
+		IsFeature:        row.IsFeatured,
+		CreatedAt:        row.CreatedAt,
+		UpdatedAt:        row.UpdatedAt,
+		DeletedAt:        row.DeletedAt,
 	}
 }
 

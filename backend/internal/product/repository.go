@@ -32,7 +32,7 @@ type ProductRepository interface {
 	GetProductImages(ctx context.Context, productID uuid.UUID) ([]*ProductImage, error)
 	GetProductImageByID(ctx context.Context, id uuid.UUID) (*ProductImage, error)
 	SetPrimaryImage(ctx context.Context, productID uuid.UUID, imageID uuid.UUID) error
-	DeleteProductImage(ctx context.Context, id uuid.UUID) error
+	DeleteProductImage(ctx context.Context, productID, imageID uuid.UUID) error
 
 	// Variants
 	CreateProductVariant(ctx context.Context, variant *ProductVariant, optionValueIDs []uuid.UUID) (*ProductVariantDetail, error)

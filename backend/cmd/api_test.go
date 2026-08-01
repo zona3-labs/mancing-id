@@ -67,6 +67,38 @@ func TestCategoryDraftLifecycleThroughHTTP(t *testing.T) {
 	}
 
 	categoryID := createdBody.Data.ID
+	childBySlug := requestJSON(t, api, http.MethodGet, "/api/v1/admin/categories/"+createdBody.Data.Slug, nil)
+	if childBySlug.status != http.StatusOK {
+		t.Fatalf("child slug read status = %d, body = %s", childBySlug.status, childBySlug.body)
+	}
+	var childBySlugBody struct {
+		Data struct {
+			ID       string `json:"id"`
+			Name     string `json:"name"`
+			Children []any  `json:"children"`
+		} `json:"data"`
+	}
+	decodeJSON(t, childBySlug.body, &childBySlugBody)
+	if childBySlugBody.Data.ID != categoryID || childBySlugBody.Data.Name != "Fly Fishing" {
+		t.Fatalf("child slug category = %s", childBySlug.body)
+	}
+
+	cycle := requestJSON(t, api, http.MethodPut, "/api/v1/admin/categories/"+categoryID, map[string]any{
+		"name":      "Fly Fishing",
+		"parent_id": categoryID,
+		"version":   1,
+	})
+	if cycle.status != http.StatusBadRequest || cycle.contentType != "application/problem+json" {
+		t.Fatalf("self-parent category = %#v", cycle)
+	}
+	var cycleProblem struct {
+		Code string `json:"code"`
+	}
+	decodeJSON(t, cycle.body, &cycleProblem)
+	if cycleProblem.Code != "category_cycle" {
+		t.Fatalf("self-parent problem = %s", cycle.body)
+	}
+
 	read := requestJSON(t, api, http.MethodGet, "/api/v1/admin/categories/"+categoryID, nil)
 	if read.status != http.StatusOK {
 		t.Fatalf("read status = %d, body = %s", read.status, read.body)
@@ -156,10 +188,14 @@ func TestCategoryDraftLifecycleThroughHTTP(t *testing.T) {
 	readAfterUpdate := requestJSON(t, api, http.MethodGet, "/api/v1/admin/categories/"+categoryID, nil)
 	var current struct {
 		Data struct {
-			Version int64 `json:"version"`
+			ParentID string `json:"parent_id"`
+			Version  int64  `json:"version"`
 		} `json:"data"`
 	}
 	decodeJSON(t, readAfterUpdate.body, &current)
+	if current.Data.ParentID != parentBody.Data.ID {
+		t.Fatalf("parent cleared by update = %s", readAfterUpdate.body)
+	}
 	deleted := requestJSON(t, api, http.MethodDelete, "/api/v1/admin/categories/"+categoryID, map[string]any{
 		"version": current.Data.Version,
 	})
@@ -170,6 +206,160 @@ func TestCategoryDraftLifecycleThroughHTTP(t *testing.T) {
 	gone := requestJSON(t, api, http.MethodGet, "/api/v1/admin/categories/"+categoryID, nil)
 	if gone.status != http.StatusNotFound {
 		t.Fatalf("deleted category status = %d, body = %s", gone.status, gone.body)
+	}
+}
+
+func TestCategoryPublicLifecycleThroughHTTP(t *testing.T) {
+	db := openIntegrationDatabase(t)
+	defer db.Close()
+	if err := migrations.Reset(db); err != nil {
+		t.Fatalf("reset migrations: %v", err)
+	}
+
+	api := (&application{db: db, config: &config.Config{HttpServer: &config.HttpserverConfig{}}}).mount()
+	created := requestJSON(t, api, http.MethodPost, "/api/v1/admin/categories", map[string]any{"name": "Fishing Gear"})
+	if created.status != http.StatusCreated {
+		t.Fatalf("create status = %d, body = %s", created.status, created.body)
+	}
+	var createdBody struct {
+		Data struct {
+			ID      string `json:"id"`
+			Slug    string `json:"slug"`
+			Version int64  `json:"version"`
+		} `json:"data"`
+	}
+	decodeJSON(t, created.body, &createdBody)
+
+	draftRead := requestJSON(t, api, http.MethodGet, "/api/v1/categories/"+createdBody.Data.Slug, nil)
+	if draftRead.status != http.StatusNotFound {
+		t.Fatalf("draft public read status = %d, body = %s", draftRead.status, draftRead.body)
+	}
+
+	activated := requestJSON(t, api, http.MethodPost, "/api/v1/admin/categories/"+createdBody.Data.ID+"/activate", map[string]any{"version": createdBody.Data.Version})
+	if activated.status != http.StatusNoContent {
+		t.Fatalf("activate status = %d, body = %s", activated.status, activated.body)
+	}
+
+	publicRead := requestJSON(t, api, http.MethodGet, "/api/v1/categories/"+createdBody.Data.Slug, nil)
+	if publicRead.status != http.StatusOK {
+		t.Fatalf("active public read status = %d, body = %s", publicRead.status, publicRead.body)
+	}
+
+	var activeBody struct {
+		Data struct {
+			Status   string `json:"status"`
+			Children []any  `json:"children"`
+		} `json:"data"`
+	}
+	decodeJSON(t, publicRead.body, &activeBody)
+	if activeBody.Data.Status != "active" {
+		t.Fatalf("active public category = %s", publicRead.body)
+	}
+
+	child := requestJSON(t, api, http.MethodPost, "/api/v1/admin/categories", map[string]any{
+		"name":      "Fly Fishing",
+		"parent_id": createdBody.Data.ID,
+	})
+	if child.status != http.StatusCreated {
+		t.Fatalf("create child status = %d, body = %s", child.status, child.body)
+	}
+	var childBody struct {
+		Data struct {
+			ID      string `json:"id"`
+			Version int64  `json:"version"`
+		} `json:"data"`
+	}
+	decodeJSON(t, child.body, &childBody)
+	childActivated := requestJSON(t, api, http.MethodPost, "/api/v1/admin/categories/"+childBody.Data.ID+"/activate", map[string]any{"version": childBody.Data.Version})
+	if childActivated.status != http.StatusNoContent {
+		t.Fatalf("activate child status = %d, body = %s", childActivated.status, childActivated.body)
+	}
+
+	publicRead = requestJSON(t, api, http.MethodGet, "/api/v1/categories/"+createdBody.Data.Slug, nil)
+	decodeJSON(t, publicRead.body, &activeBody)
+	if len(activeBody.Data.Children) != 1 {
+		t.Fatalf("active category children = %s", publicRead.body)
+	}
+
+	retireParent := requestJSON(t, api, http.MethodPost, "/api/v1/admin/categories/"+createdBody.Data.ID+"/retire", map[string]any{"version": createdBody.Data.Version + 1})
+	if retireParent.status != http.StatusConflict {
+		t.Fatalf("retire parent with child status = %d, body = %s", retireParent.status, retireParent.body)
+	}
+	var retireProblem struct {
+		Code string `json:"code"`
+	}
+	decodeJSON(t, retireParent.body, &retireProblem)
+	if retireProblem.Code != "category_has_children" {
+		t.Fatalf("retire parent problem = %s", retireParent.body)
+	}
+
+	retireChild := requestJSON(t, api, http.MethodPost, "/api/v1/admin/categories/"+childBody.Data.ID+"/retire", map[string]any{"version": childBody.Data.Version + 1})
+	if retireChild.status != http.StatusNoContent {
+		t.Fatalf("retire child status = %d, body = %s", retireChild.status, retireChild.body)
+	}
+	retired := requestJSON(t, api, http.MethodPost, "/api/v1/admin/categories/"+createdBody.Data.ID+"/retire", map[string]any{"version": createdBody.Data.Version + 1})
+	if retired.status != http.StatusNoContent {
+		t.Fatalf("retire status = %d, body = %s", retired.status, retired.body)
+	}
+	retiredRead := requestJSON(t, api, http.MethodGet, "/api/v1/categories/"+createdBody.Data.Slug, nil)
+	if retiredRead.status != http.StatusNotFound {
+		t.Fatalf("retired public read status = %d, body = %s", retiredRead.status, retiredRead.body)
+	}
+}
+
+func TestProductUpdateTargetsRequestedProductThroughHTTP(t *testing.T) {
+	db := openIntegrationDatabase(t)
+	defer db.Close()
+	if err := migrations.Reset(db); err != nil {
+		t.Fatalf("reset migrations: %v", err)
+	}
+
+	api := (&application{db: db, config: &config.Config{HttpServer: &config.HttpserverConfig{}}}).mount()
+	created := requestJSON(t, api, http.MethodPost, "/api/v1/products", map[string]any{
+		"name":   "Spinning Reel",
+		"status": "draft",
+	})
+	if created.status != http.StatusCreated {
+		t.Fatalf("create product status = %d, body = %s", created.status, created.body)
+	}
+	var createdBody struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	decodeJSON(t, created.body, &createdBody)
+
+	updated := requestJSON(t, api, http.MethodPut, "/api/v1/products/"+createdBody.Data.ID, map[string]any{
+		"name":    "Tournament Spinning Reel",
+		"status":  "draft",
+		"version": 1,
+	})
+	if updated.status != http.StatusOK {
+		t.Fatalf("update product status = %d, body = %s", updated.status, updated.body)
+	}
+	var updatedBody struct {
+		Data struct {
+			ID      string `json:"id"`
+			Name    string `json:"name"`
+			Version int64  `json:"version"`
+		} `json:"data"`
+	}
+	decodeJSON(t, updated.body, &updatedBody)
+	if updatedBody.Data.ID != createdBody.Data.ID || updatedBody.Data.Name != "Tournament Spinning Reel" || updatedBody.Data.Version != 2 {
+		t.Fatalf("updated product = %s", updated.body)
+	}
+	stale := requestJSON(t, api, http.MethodPut, "/api/v1/products/"+createdBody.Data.ID, map[string]any{
+		"name":    "Stale Reel",
+		"status":  "draft",
+		"version": 1,
+	})
+	if stale.status != http.StatusConflict {
+		t.Fatalf("stale product update = %#v", stale)
+	}
+
+	read := requestJSON(t, api, http.MethodGet, "/api/v1/products/"+createdBody.Data.ID, nil)
+	if read.status != http.StatusOK || !bytes.Contains(read.body, []byte("Tournament Spinning Reel")) {
+		t.Fatalf("updated product read = %#v", read)
 	}
 }
 

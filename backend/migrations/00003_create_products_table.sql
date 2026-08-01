@@ -9,6 +9,7 @@ CREATE TABLE products (
     short_description VARCHAR(255) NULL,
     brand_id    UUID REFERENCES brands(id) ON DELETE SET NULL,
     status      product_status NOT NULL DEFAULT 'draft',
+    version     BIGINT NOT NULL DEFAULT 1 CHECK (version > 0),
     is_featured BOOLEAN NOT NULL DEFAULT FALSE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),

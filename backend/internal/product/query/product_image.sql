@@ -15,11 +15,16 @@ FROM product_images
 WHERE id = $1;
 
 -- name: SetPrimaryImage :execresult
-UPDATE product_images
-SET is_primary = CASE WHEN id = $2 THEN TRUE ELSE FALSE END,
+UPDATE product_images AS image
+SET is_primary = CASE WHEN image.id = $2 THEN TRUE ELSE FALSE END,
     updated_at = NOW()
-WHERE product_id = $1;
+WHERE image.product_id = $1
+  AND EXISTS (
+      SELECT 1
+      FROM product_images target
+      WHERE target.id = $2 AND target.product_id = $1
+  );
 
 -- name: DeleteProductImage :execresult
 DELETE FROM product_images
-WHERE id = $1;
+WHERE product_id = $1 AND id = $2;

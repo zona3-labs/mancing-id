@@ -11,11 +11,14 @@ import (
 )
 
 type categoryPostgresRepository struct {
+	db      *sql.DB
 	queries *categoryDB.Queries
 }
 
+const categoryHierarchyLockKey int64 = 4242
+
 func NewCategoryRepository(db *sql.DB) CategoryRepository {
-	return &categoryPostgresRepository{queries: categoryDB.New(db)}
+	return &categoryPostgresRepository{db: db, queries: categoryDB.New(db)}
 }
 
 func (r categoryPostgresRepository) CreateCategory(ctx context.Context, category *Category) error {
@@ -65,6 +68,18 @@ func (r categoryPostgresRepository) GetAllCategories(ctx context.Context) ([]*Ca
 	return categories, nil
 }
 
+func (r categoryPostgresRepository) GetActiveCategories(ctx context.Context) ([]*Category, error) {
+	rows, err := r.queries.GetActiveCategories(ctx)
+	if err != nil {
+		return nil, err
+	}
+	categories := make([]*Category, 0, len(rows))
+	for _, row := range rows {
+		categories = append(categories, fromTreeRow(row.ID, row.ParentID, row.Name, row.Slug, row.Status, row.Version, row.CreatedAt, row.UpdatedAt, row.DeletedAt))
+	}
+	return categories, nil
+}
+
 func (r categoryPostgresRepository) GetCategoryTree(ctx context.Context, slug string) ([]*Category, error) {
 	rows, err := r.queries.GetCategoryTreeBySlug(ctx, slug)
 	if err != nil {
@@ -72,32 +87,40 @@ func (r categoryPostgresRepository) GetCategoryTree(ctx context.Context, slug st
 	}
 	categories := make([]*Category, 0, len(rows))
 	for _, row := range rows {
-		var parentID *uuid.UUID
-		if row.ParentID.Valid {
-			parentID = &row.ParentID.UUID
-		}
-		categories = append(categories, &Category{
-			ID:        row.ID,
-			ParentID:  parentID,
-			Name:      row.Name,
-			Slug:      row.Slug,
-			Status:    CategoryStatus(row.Status),
-			Version:   row.Version,
-			CreatedAt: row.CreatedAt,
-			UpdatedAt: row.UpdatedAt,
-			DeletedAt: nullTimePointer(row.DeletedAt),
-		})
+		categories = append(categories, fromTreeRow(row.ID, row.ParentID, row.Name, row.Slug, row.Status, row.Version, row.CreatedAt, row.UpdatedAt, row.DeletedAt))
+	}
+	return categories, nil
+}
+
+func (r categoryPostgresRepository) GetActiveCategoryTree(ctx context.Context, slug string) ([]*Category, error) {
+	rows, err := r.queries.GetActiveCategoryTreeBySlug(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	categories := make([]*Category, 0, len(rows))
+	for _, row := range rows {
+		categories = append(categories, fromTreeRow(row.ID, row.ParentID, row.Name, row.Slug, row.Status, row.Version, row.CreatedAt, row.UpdatedAt, row.DeletedAt))
 	}
 	return categories, nil
 }
 
 func (r categoryPostgresRepository) UpdateCategory(ctx context.Context, category *Category, expectedVersion int64) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", categoryHierarchyLockKey); err != nil {
+		return err
+	}
+	queries := r.queries.WithTx(tx)
 	parentID := uuid.NullUUID{}
 	if category.ParentID != nil {
 		parentID = uuid.NullUUID{UUID: *category.ParentID, Valid: true}
 	}
 
-	row, err := r.queries.UpdateCategory(ctx, categoryDB.UpdateCategoryParams{
+	row, err := queries.UpdateCategory(ctx, categoryDB.UpdateCategoryParams{
 		ID:       category.ID,
 		ParentID: parentID,
 		Name:     category.Name,
@@ -114,11 +137,35 @@ func (r categoryPostgresRepository) UpdateCategory(ctx context.Context, category
 		return err
 	}
 	*category = fromDBCategory(row)
-	return nil
+	return tx.Commit()
+}
+
+func (r categoryPostgresRepository) ActivateCategory(ctx context.Context, id uuid.UUID, expectedVersion int64) error {
+	result, err := r.runHierarchyMutation(ctx, func(queries *categoryDB.Queries) (sql.Result, error) {
+		return queries.ActivateCategory(ctx, categoryDB.ActivateCategoryParams{ID: id, Version: expectedVersion})
+	})
+	if err != nil {
+		return err
+	}
+	return r.classifyTransitionResult(ctx, id, expectedVersion, result)
+}
+
+func (r categoryPostgresRepository) RetireCategory(ctx context.Context, id uuid.UUID, expectedVersion int64) error {
+	result, err := r.runHierarchyMutation(ctx, func(queries *categoryDB.Queries) (sql.Result, error) {
+		return queries.RetireCategory(ctx, categoryDB.RetireCategoryParams{ID: id, Version: expectedVersion})
+	})
+	if err != nil {
+		return err
+	}
+	return r.classifyTransitionResult(ctx, id, expectedVersion, result)
 }
 
 func (r categoryPostgresRepository) CheckCategoriesByParentID(ctx context.Context, id uuid.UUID) (int64, error) {
 	return r.queries.CheckCategoriesByParentID(ctx, uuid.NullUUID{UUID: id, Valid: true})
+}
+
+func (r categoryPostgresRepository) CheckNonRetiredCategoriesByParentID(ctx context.Context, id uuid.UUID) (int64, error) {
+	return r.queries.CheckNonRetiredCategoriesByParentID(ctx, uuid.NullUUID{UUID: id, Valid: true})
 }
 
 func (r categoryPostgresRepository) DeleteCategory(ctx context.Context, id uuid.UUID, expectedVersion int64) error {
@@ -145,9 +192,49 @@ func (r categoryPostgresRepository) classifyWriteFailure(ctx context.Context, id
 		return ErrCategoryVersionConflict
 	}
 	if category.Status != CategoryStatusDraft {
+		if category.Status == CategoryStatusActive {
+			children, childErr := r.CheckNonRetiredCategoriesByParentID(ctx, id)
+			if childErr != nil {
+				return childErr
+			}
+			if children > 0 {
+				return ErrCategoryHasChildren
+			}
+		}
 		return ErrCategoryNotEditable
 	}
 	return ErrCategoryVersionConflict
+}
+
+func (r categoryPostgresRepository) classifyTransitionResult(ctx context.Context, id uuid.UUID, expectedVersion int64, result sql.Result) error {
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 1 {
+		return nil
+	}
+	return r.classifyWriteFailure(ctx, id, expectedVersion)
+}
+
+func (r categoryPostgresRepository) runHierarchyMutation(ctx context.Context, mutation func(*categoryDB.Queries) (sql.Result, error)) (sql.Result, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", categoryHierarchyLockKey); err != nil {
+		return nil, err
+	}
+	result, err := mutation(r.queries.WithTx(tx))
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func fromDBCategory(row categoryDB.Category) Category {
@@ -165,6 +252,24 @@ func fromDBCategory(row categoryDB.Category) Category {
 		CreatedAt: row.CreatedAt,
 		UpdatedAt: row.UpdatedAt,
 		DeletedAt: row.DeletedAt,
+	}
+}
+
+func fromTreeRow(id uuid.UUID, parentID uuid.NullUUID, name, slug string, status categoryDB.CategoryStatus, version int64, createdAt, updatedAt time.Time, deletedAt sql.NullTime) *Category {
+	var parent *uuid.UUID
+	if parentID.Valid {
+		parent = &parentID.UUID
+	}
+	return &Category{
+		ID:        id,
+		ParentID:  parent,
+		Name:      name,
+		Slug:      slug,
+		Status:    CategoryStatus(status),
+		Version:   version,
+		CreatedAt: createdAt,
+		UpdatedAt: updatedAt,
+		DeletedAt: nullTimePointer(deletedAt),
 	}
 }
 

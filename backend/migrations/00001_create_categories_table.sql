@@ -5,6 +5,7 @@ CREATE TYPE category_status AS ENUM ('draft', 'active', 'retired');
 CREATE TABLE categories (
     id          UUID        PRIMARY KEY,
     parent_id   UUID        REFERENCES categories(id) ON DELETE SET NULL,
+    CONSTRAINT categories_no_self_parent CHECK (parent_id IS NULL OR parent_id <> id),
     name        VARCHAR(255) NOT NULL,
     slug        VARCHAR(255) NOT NULL UNIQUE,
     status      category_status NOT NULL DEFAULT 'draft',

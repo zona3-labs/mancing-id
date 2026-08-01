@@ -33,7 +33,7 @@ type ProductUsecase interface {
 	GetProductImages(ctx context.Context, productID uuid.UUID) ([]*ProductImage, error)
 	GetProductImageByID(ctx context.Context, id uuid.UUID) (*ProductImage, error)
 	SetPrimaryImage(ctx context.Context, productID uuid.UUID, imageID uuid.UUID) error
-	DeleteProductImage(ctx context.Context, id uuid.UUID) error
+	DeleteProductImage(ctx context.Context, productID, imageID uuid.UUID) error
 
 	// Variants
 	CreateProductVariant(ctx context.Context, variant *ProductVariant, optionValueIDs []uuid.UUID) (*ProductVariantDetail, error)
@@ -53,6 +53,7 @@ func NewProductUsecase(repo ProductRepository) ProductUsecase {
 
 func (p productUsecase) CreateProduct(ctx context.Context, product *Product) error {
 	product.ID = uuid.New()
+	product.Version = 1
 	base := product.Name
 	if product.Slug != "" {
 		base = product.Slug
@@ -85,7 +86,6 @@ func (p productUsecase) GetProductDetailByID(ctx context.Context, id uuid.UUID) 
 }
 
 func (p productUsecase) UpdateProduct(ctx context.Context, product *Product) error {
-	product.ID = uuid.New()
 	base := product.Name
 	if product.Slug != "" {
 		base = product.Slug
@@ -178,8 +178,15 @@ func (p productUsecase) SetPrimaryImage(ctx context.Context, productID uuid.UUID
 	return p.repo.SetPrimaryImage(ctx, productID, imageID)
 }
 
-func (p productUsecase) DeleteProductImage(ctx context.Context, id uuid.UUID) error {
-	return p.repo.DeleteProductImage(ctx, id)
+func (p productUsecase) DeleteProductImage(ctx context.Context, productID, imageID uuid.UUID) error {
+	image, err := p.repo.GetProductImageByID(ctx, imageID)
+	if err != nil {
+		return err
+	}
+	if image.ProductID != productID {
+		return ErrProductImageNotFound
+	}
+	return p.repo.DeleteProductImage(ctx, productID, imageID)
 }
 
 // -------------------------------------------------------

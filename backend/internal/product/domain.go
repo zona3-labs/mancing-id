@@ -31,6 +31,7 @@ type Product struct {
 	ShortDescription *string       `json:"short_description"`
 	BrandID          *uuid.UUID    `json:"brand_id"`
 	Status           ProductStatus `json:"status"`
+	Version          int64         `json:"version"`
 	IsFeature        bool          `json:"is_feature"`
 	CreatedAt        time.Time     `json:"created_at"`
 	UpdatedAt        time.Time     `json:"updated_at"`

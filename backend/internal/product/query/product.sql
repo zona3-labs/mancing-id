@@ -3,13 +3,13 @@ INSERT INTO products (id, name, slug, description, short_description, status, br
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW(), NULL);
 
 -- name: GetAllProducts :many
-SELECT id, name, slug, description, short_description, brand_id, status, is_featured, created_at, updated_at, deleted_at
+SELECT id, name, slug, description, short_description, brand_id, status, version, is_featured, created_at, updated_at, deleted_at
 FROM products
 WHERE deleted_at IS NULL
 ORDER BY created_at DESC;
 
 
--- name: UpdateProduct :exec
+-- name: UpdateProduct :one
 UPDATE products
 SET name = $2,
     slug = $3,
@@ -18,8 +18,10 @@ SET name = $2,
     status = $6,
     brand_id = $7,
     is_featured = $8,
+    version = version + 1,
     updated_at = NOW()
-WHERE id = $1 AND deleted_at IS NULL;
+WHERE id = $1 AND version = $9 AND deleted_at IS NULL
+RETURNING id, name, slug, description, short_description, brand_id, status, version, is_featured, created_at, updated_at, deleted_at;
 
 -- name: DeleteProduct :execresult
 UPDATE products
@@ -36,6 +38,7 @@ SELECT
     p.short_description,
     p.brand_id,
     p.status,
+    p.version,
     p.is_featured,
     p.created_at,
     p.updated_at,
@@ -74,6 +77,7 @@ SELECT
     p.short_description,
     p.brand_id,
     p.status,
+    p.version,
     p.is_featured,
     p.created_at,
     p.updated_at,
@@ -102,4 +106,3 @@ LEFT JOIN product_option_values pov
 WHERE p.id = $1
   AND p.deleted_at IS NULL
 ORDER BY po.position ASC, po.created_at ASC, pov.position ASC, pov.created_at ASC;
-

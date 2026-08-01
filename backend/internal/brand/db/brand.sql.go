@@ -106,7 +106,7 @@ func (q *Queries) GetBrandBySlug(ctx context.Context, slug string) (Brand, error
 	return i, err
 }
 
-const updateBrand = `-- name: UpdateBrand :exec
+const updateBrand = `-- name: UpdateBrand :execresult
 UPDATE brands
 SET name = $2,
     slug = $3,
@@ -124,15 +124,14 @@ type UpdateBrandParams struct {
 	IsActive bool      `json:"is_active"`
 }
 
-func (q *Queries) UpdateBrand(ctx context.Context, arg UpdateBrandParams) error {
-	_, err := q.db.ExecContext(ctx, updateBrand,
+func (q *Queries) UpdateBrand(ctx context.Context, arg UpdateBrandParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, updateBrand,
 		arg.ID,
 		arg.Name,
 		arg.Slug,
 		arg.LogoPath,
 		arg.IsActive,
 	)
-	return err
 }
 
 const updateBrandLogo = `-- name: UpdateBrandLogo :execresult

@@ -13,8 +13,12 @@ type CategoryUsecase interface {
 	CreateCategory(ctx context.Context, category *Category) error
 	GetCategoryByID(ctx context.Context, id uuid.UUID) (*Category, error)
 	GetAllCategories(ctx context.Context) ([]*Category, error)
+	GetActiveCategories(ctx context.Context) ([]*Category, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (*Category, error)
+	GetActiveCategoryBySlug(ctx context.Context, slug string) (*Category, error)
 	UpdateCategory(ctx context.Context, category *Category, expectedVersion int64) error
+	ActivateCategory(ctx context.Context, id uuid.UUID, expectedVersion int64) error
+	RetireCategory(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 	DeleteCategory(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 }
 
@@ -61,6 +65,14 @@ func (c categoryUsecase) GetAllCategories(ctx context.Context) ([]*Category, err
 	return c.repo.GetAllCategories(ctx)
 }
 
+func (c categoryUsecase) GetActiveCategories(ctx context.Context) ([]*Category, error) {
+	rows, err := c.repo.GetActiveCategories(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return buildForest(rows), nil
+}
+
 func (c categoryUsecase) GetCategoryBySlug(ctx context.Context, slug string) (*Category, error) {
 	rows, err := c.repo.GetCategoryTree(ctx, slug)
 	if err != nil {
@@ -72,7 +84,22 @@ func (c categoryUsecase) GetCategoryBySlug(ctx context.Context, slug string) (*C
 	return buildTree(rows), nil
 }
 
+func (c categoryUsecase) GetActiveCategoryBySlug(ctx context.Context, slug string) (*Category, error) {
+	rows, err := c.repo.GetActiveCategoryTree(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, ErrCategoryNotFound
+	}
+	return buildTree(rows), nil
+}
+
 func (c categoryUsecase) UpdateCategory(ctx context.Context, category *Category, expectedVersion int64) error {
+	if err := c.validateParent(ctx, category.ID, category.ParentID); err != nil {
+		return err
+	}
+
 	base := category.Name
 	if category.Slug != "" {
 		base = category.Slug
@@ -93,6 +120,50 @@ func (c categoryUsecase) UpdateCategory(ctx context.Context, category *Category,
 		}
 		category.Slug = fmt.Sprintf("%s-%d", baseSlug, attempt+1)
 	}
+}
+
+func (c categoryUsecase) ActivateCategory(ctx context.Context, id uuid.UUID, expectedVersion int64) error {
+	category, err := c.repo.GetCategoryByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if category.Version != expectedVersion {
+		return ErrCategoryVersionConflict
+	}
+	if category.Status != CategoryStatusDraft {
+		return ErrCategoryNotEditable
+	}
+	if category.ParentID != nil {
+		currentID := *category.ParentID
+		for {
+			parent, err := c.repo.GetCategoryByID(ctx, currentID)
+			if err != nil {
+				return ErrParentCategoryNotFound
+			}
+			if parent.Status != CategoryStatusActive {
+				return ErrCategoryAncestorNotActive
+			}
+			if parent.ParentID == nil {
+				break
+			}
+			currentID = *parent.ParentID
+		}
+	}
+	return c.repo.ActivateCategory(ctx, id, expectedVersion)
+}
+
+func (c categoryUsecase) RetireCategory(ctx context.Context, id uuid.UUID, expectedVersion int64) error {
+	category, err := c.repo.GetCategoryByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if category.Version != expectedVersion {
+		return ErrCategoryVersionConflict
+	}
+	if category.Status != CategoryStatusActive {
+		return ErrCategoryNotEditable
+	}
+	return c.repo.RetireCategory(ctx, id, expectedVersion)
 }
 
 func (c categoryUsecase) DeleteCategory(ctx context.Context, id uuid.UUID, expectedVersion int64) error {
@@ -117,19 +188,65 @@ func (c categoryUsecase) DeleteCategory(ctx context.Context, id uuid.UUID, expec
 	return c.repo.DeleteCategory(ctx, id, expectedVersion)
 }
 
+func (c categoryUsecase) validateParent(ctx context.Context, categoryID uuid.UUID, parentID *uuid.UUID) error {
+	if parentID == nil {
+		return nil
+	}
+	if *parentID == categoryID {
+		return ErrCategoryCycle
+	}
+
+	visited := map[uuid.UUID]struct{}{categoryID: {}}
+	currentID := *parentID
+	for {
+		if _, seen := visited[currentID]; seen {
+			return ErrCategoryCycle
+		}
+		visited[currentID] = struct{}{}
+
+		parent, err := c.repo.GetCategoryByID(ctx, currentID)
+		if err != nil {
+			if err == ErrCategoryNotFound {
+				return ErrParentCategoryNotFound
+			}
+			return err
+		}
+		if parent.ParentID == nil {
+			return nil
+		}
+		currentID = *parent.ParentID
+	}
+}
+
 // buildTree converts a flat list from the recursive CTE into a nested tree.
 func buildTree(rows []*Category) *Category {
+	roots := buildForest(rows)
+	if len(roots) == 0 {
+		return nil
+	}
+	return roots[0]
+}
+
+func buildForest(rows []*Category) []*Category {
+	if len(rows) == 0 {
+		return []*Category{}
+	}
+
 	index := make(map[uuid.UUID]*Category, len(rows))
 	for _, row := range rows {
 		index[row.ID] = row
 	}
-	var root *Category
+	roots := make([]*Category, 0)
 	for _, row := range rows {
 		if row.ParentID == nil {
-			root = row
-		} else if parent, ok := index[*row.ParentID]; ok {
+			roots = append(roots, row)
+			continue
+		}
+		if parent, ok := index[*row.ParentID]; ok {
 			parent.Children = append(parent.Children, row)
+		} else {
+			roots = append(roots, row)
 		}
 	}
-	return root
+	return roots
 }
