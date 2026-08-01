@@ -59,6 +59,7 @@ func (app *application) registerV1Routes(v1 *gin.RouterGroup) {
 	categoryUsecase := category.NewCategoryUsecase(categoryRepo)
 	categoryHandler := category.NewCategoryHandler(categoryUsecase)
 	categoryHandler.RegisterRoutes(v1)
+	categoryHandler.RegisterAdminRoutes(v1)
 
 	// Brand
 	brandRepo := brand.NewBrandRepository(app.db)

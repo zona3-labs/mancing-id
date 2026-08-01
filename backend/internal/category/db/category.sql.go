@@ -13,21 +13,22 @@ import (
 	"github.com/google/uuid"
 )
 
-const checkActiveCategoriesByParentId = `-- name: CheckActiveCategoriesByParentId :one
+const checkCategoriesByParentID = `-- name: CheckCategoriesByParentID :one
 SELECT COUNT(*) FROM categories
 WHERE parent_id = $1 AND deleted_at IS NULL
 `
 
-func (q *Queries) CheckActiveCategoriesByParentId(ctx context.Context, parentID uuid.NullUUID) (int64, error) {
-	row := q.db.QueryRowContext(ctx, checkActiveCategoriesByParentId, parentID)
+func (q *Queries) CheckCategoriesByParentID(ctx context.Context, parentID uuid.NullUUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, checkCategoriesByParentID, parentID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
 }
 
-const createCategory = `-- name: CreateCategory :exec
-INSERT INTO categories (id, parent_id,name, slug, is_active, created_at, updated_at, deleted_at)
-VALUES ($1, $2, $3,$4,TRUE, NOW(), NOW(), NULL)
+const createCategory = `-- name: CreateCategory :one
+INSERT INTO categories (id, parent_id, name, slug, status, version, created_at, updated_at, deleted_at)
+VALUES ($1, $2, $3, $4, 'draft', 1, NOW(), NOW(), NULL)
+RETURNING id, parent_id, name, slug, status, version, created_at, updated_at, deleted_at
 `
 
 type CreateCategoryParams struct {
@@ -37,29 +38,46 @@ type CreateCategoryParams struct {
 	Slug     string        `json:"slug"`
 }
 
-func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) error {
-	_, err := q.db.ExecContext(ctx, createCategory,
+func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) (Category, error) {
+	row := q.db.QueryRowContext(ctx, createCategory,
 		arg.ID,
 		arg.ParentID,
 		arg.Name,
 		arg.Slug,
 	)
-	return err
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Name,
+		&i.Slug,
+		&i.Status,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const deleteCategory = `-- name: DeleteCategory :execresult
 UPDATE categories
 SET deleted_at = NOW(),
     updated_at = NOW()
-WHERE id = $1 AND deleted_at IS NULL
+WHERE id = $1 AND status = 'draft' AND version = $2 AND deleted_at IS NULL
 `
 
-func (q *Queries) DeleteCategory(ctx context.Context, id uuid.UUID) (sql.Result, error) {
-	return q.db.ExecContext(ctx, deleteCategory, id)
+type DeleteCategoryParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) DeleteCategory(ctx context.Context, arg DeleteCategoryParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, deleteCategory, arg.ID, arg.Version)
 }
 
 const getAllCategories = `-- name: GetAllCategories :many
-SELECT id, parent_id, name, slug, is_active, created_at, updated_at, deleted_at
+SELECT id, parent_id, name, slug, status, version, created_at, updated_at, deleted_at
 FROM categories
 WHERE deleted_at IS NULL
 ORDER BY created_at DESC
@@ -79,7 +97,8 @@ func (q *Queries) GetAllCategories(ctx context.Context) ([]Category, error) {
 			&i.ParentID,
 			&i.Name,
 			&i.Slug,
-			&i.IsActive,
+			&i.Status,
+			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -97,8 +116,31 @@ func (q *Queries) GetAllCategories(ctx context.Context) ([]Category, error) {
 	return items, nil
 }
 
+const getCategoryByID = `-- name: GetCategoryByID :one
+SELECT id, parent_id, name, slug, status, version, created_at, updated_at, deleted_at
+FROM categories
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetCategoryByID(ctx context.Context, id uuid.UUID) (Category, error) {
+	row := q.db.QueryRowContext(ctx, getCategoryByID, id)
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Name,
+		&i.Slug,
+		&i.Status,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const getCategoryBySlug = `-- name: GetCategoryBySlug :one
-SELECT id, parent_id, name, slug, is_active, created_at, updated_at, deleted_at
+SELECT id, parent_id, name, slug, status, version, created_at, updated_at, deleted_at
 FROM categories
 WHERE slug = $1 AND deleted_at IS NULL
 `
@@ -111,7 +153,8 @@ func (q *Queries) GetCategoryBySlug(ctx context.Context, slug string) (Category,
 		&i.ParentID,
 		&i.Name,
 		&i.Slug,
-		&i.IsActive,
+		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -121,29 +164,30 @@ func (q *Queries) GetCategoryBySlug(ctx context.Context, slug string) (Category,
 
 const getCategoryTreeBySlug = `-- name: GetCategoryTreeBySlug :many
 WITH RECURSIVE category_tree AS (
-    SELECT categories.id, categories.parent_id, categories.name, categories.slug, categories.is_active, categories.created_at, categories.updated_at, categories.deleted_at
+    SELECT categories.id, categories.parent_id, categories.name, categories.slug, categories.status, categories.version, categories.created_at, categories.updated_at, categories.deleted_at
     FROM categories
     WHERE categories.slug = $1 AND categories.deleted_at IS NULL
 
     UNION ALL
 
-    SELECT c.id, c.parent_id, c.name, c.slug, c.is_active, c.created_at, c.updated_at, c.deleted_at
+    SELECT c.id, c.parent_id, c.name, c.slug, c.status, c.version, c.created_at, c.updated_at, c.deleted_at
     FROM categories c
     INNER JOIN category_tree ct ON c.parent_id = ct.id
     WHERE c.deleted_at IS NULL
 )
-SELECT id, parent_id, name, slug, is_active, created_at, updated_at, deleted_at FROM category_tree
+SELECT id, parent_id, name, slug, status, version, created_at, updated_at, deleted_at FROM category_tree
 `
 
 type GetCategoryTreeBySlugRow struct {
-	ID        uuid.UUID     `json:"id"`
-	ParentID  uuid.NullUUID `json:"parent_id"`
-	Name      string        `json:"name"`
-	Slug      string        `json:"slug"`
-	IsActive  bool          `json:"is_active"`
-	CreatedAt time.Time     `json:"created_at"`
-	UpdatedAt time.Time     `json:"updated_at"`
-	DeletedAt sql.NullTime  `json:"deleted_at"`
+	ID        uuid.UUID      `json:"id"`
+	ParentID  uuid.NullUUID  `json:"parent_id"`
+	Name      string         `json:"name"`
+	Slug      string         `json:"slug"`
+	Status    CategoryStatus `json:"status"`
+	Version   int64          `json:"version"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt sql.NullTime   `json:"deleted_at"`
 }
 
 func (q *Queries) GetCategoryTreeBySlug(ctx context.Context, slug string) ([]GetCategoryTreeBySlugRow, error) {
@@ -160,7 +204,8 @@ func (q *Queries) GetCategoryTreeBySlug(ctx context.Context, slug string) ([]Get
 			&i.ParentID,
 			&i.Name,
 			&i.Slug,
-			&i.IsActive,
+			&i.Status,
+			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -178,14 +223,15 @@ func (q *Queries) GetCategoryTreeBySlug(ctx context.Context, slug string) ([]Get
 	return items, nil
 }
 
-const updateCategory = `-- name: UpdateCategory :exec
+const updateCategory = `-- name: UpdateCategory :one
 UPDATE categories
 SET parent_id = $2,
     name = $3,
     slug = $4,
-    is_active = $5,
+    version = version + 1,
     updated_at = NOW()
-WHERE id = $1 AND deleted_at IS NULL
+WHERE id = $1 AND status = 'draft' AND version = $5 AND deleted_at IS NULL
+RETURNING id, parent_id, name, slug, status, version, created_at, updated_at, deleted_at
 `
 
 type UpdateCategoryParams struct {
@@ -193,16 +239,28 @@ type UpdateCategoryParams struct {
 	ParentID uuid.NullUUID `json:"parent_id"`
 	Name     string        `json:"name"`
 	Slug     string        `json:"slug"`
-	IsActive bool          `json:"is_active"`
+	Version  int64         `json:"version"`
 }
 
-func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) error {
-	_, err := q.db.ExecContext(ctx, updateCategory,
+func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error) {
+	row := q.db.QueryRowContext(ctx, updateCategory,
 		arg.ID,
 		arg.ParentID,
 		arg.Name,
 		arg.Slug,
-		arg.IsActive,
+		arg.Version,
 	)
-	return err
+	var i Category
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Name,
+		&i.Slug,
+		&i.Status,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }

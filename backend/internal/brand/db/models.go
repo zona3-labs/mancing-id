@@ -13,6 +13,49 @@ import (
 	"github.com/google/uuid"
 )
 
+type CategoryStatus string
+
+const (
+	CategoryStatusDraft   CategoryStatus = "draft"
+	CategoryStatusActive  CategoryStatus = "active"
+	CategoryStatusRetired CategoryStatus = "retired"
+)
+
+func (e *CategoryStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = CategoryStatus(s)
+	case string:
+		*e = CategoryStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for CategoryStatus: %T", src)
+	}
+	return nil
+}
+
+type NullCategoryStatus struct {
+	CategoryStatus CategoryStatus `json:"category_status"`
+	Valid          bool           `json:"valid"` // Valid is true if CategoryStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullCategoryStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.CategoryStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.CategoryStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullCategoryStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.CategoryStatus), nil
+}
+
 type ProductStatus string
 
 const (
@@ -111,14 +154,15 @@ type Brand struct {
 }
 
 type Category struct {
-	ID        uuid.UUID     `json:"id"`
-	ParentID  uuid.NullUUID `json:"parent_id"`
-	Name      string        `json:"name"`
-	Slug      string        `json:"slug"`
-	IsActive  bool          `json:"is_active"`
-	CreatedAt time.Time     `json:"created_at"`
-	UpdatedAt time.Time     `json:"updated_at"`
-	DeletedAt sql.NullTime  `json:"deleted_at"`
+	ID        uuid.UUID      `json:"id"`
+	ParentID  uuid.NullUUID  `json:"parent_id"`
+	Name      string         `json:"name"`
+	Slug      string         `json:"slug"`
+	Status    CategoryStatus `json:"status"`
+	Version   int64          `json:"version"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt sql.NullTime   `json:"deleted_at"`
 }
 
 type Product struct {

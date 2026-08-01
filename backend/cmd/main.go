@@ -7,6 +7,7 @@ import (
 	"github.com/zona3-labs/mancing-id/internal/config"
 	"github.com/zona3-labs/mancing-id/internal/infrastructure"
 	"github.com/zona3-labs/mancing-id/internal/upload"
+	"github.com/zona3-labs/mancing-id/migrations"
 )
 
 // @title           Mancing ID API
@@ -22,6 +23,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+
+	if err := migrations.Apply(db); err != nil {
+		log.Fatalf("failed to apply migrations: %v", err)
+	}
 
 	s3Client, err := infrastructure.NewS3Client(cfg)
 	if err != nil {
