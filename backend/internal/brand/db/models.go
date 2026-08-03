@@ -13,6 +13,49 @@ import (
 	"github.com/google/uuid"
 )
 
+type BrandStatus string
+
+const (
+	BrandStatusDraft    BrandStatus = "draft"
+	BrandStatusActive   BrandStatus = "active"
+	BrandStatusInactive BrandStatus = "inactive"
+)
+
+func (e *BrandStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = BrandStatus(s)
+	case string:
+		*e = BrandStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for BrandStatus: %T", src)
+	}
+	return nil
+}
+
+type NullBrandStatus struct {
+	BrandStatus BrandStatus `json:"brand_status"`
+	Valid       bool        `json:"valid"` // Valid is true if BrandStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullBrandStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.BrandStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.BrandStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullBrandStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.BrandStatus), nil
+}
+
 type CategoryStatus string
 
 const (
@@ -143,14 +186,15 @@ func (ns NullVariantStatus) Value() (driver.Value, error) {
 }
 
 type Brand struct {
-	ID        uuid.UUID  `json:"id"`
-	Name      string     `json:"name"`
-	Slug      string     `json:"slug"`
-	LogoPath  *string    `json:"logo_path"`
-	IsActive  bool       `json:"is_active"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
-	DeletedAt *time.Time `json:"deleted_at"`
+	ID        uuid.UUID   `json:"id"`
+	Name      string      `json:"name"`
+	Slug      string      `json:"slug"`
+	LogoPath  *string     `json:"logo_path"`
+	Status    BrandStatus `json:"status"`
+	Version   int64       `json:"version"`
+	CreatedAt time.Time   `json:"created_at"`
+	UpdatedAt time.Time   `json:"updated_at"`
+	DeletedAt *time.Time  `json:"deleted_at"`
 }
 
 type Category struct {

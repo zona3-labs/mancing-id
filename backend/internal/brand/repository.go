@@ -8,9 +8,16 @@ import (
 
 type BrandRepository interface {
 	CreateBrand(ctx context.Context, brand *Brand) error
+	GetBrandByID(ctx context.Context, id uuid.UUID) (*Brand, error)
 	GetAllBrands(ctx context.Context) ([]*Brand, error)
+	GetPublicBrands(ctx context.Context) ([]*Brand, error)
 	GetBrandBySlug(ctx context.Context, slug string) (*Brand, error)
-	UpdateBrand(ctx context.Context, Brand *Brand) error
+	GetPublicBrandBySlug(ctx context.Context, slug string) (*Brand, error)
+	UpdateBrand(ctx context.Context, brand *Brand, expectedVersion int64) error
+	ActivateBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
+	DeactivateBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
+	ReactivateBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
+	CountProductsByBrandID(ctx context.Context, id uuid.UUID) (int64, error)
 	UpdateBrandLogo(ctx context.Context, id uuid.UUID, logoPath string) error
-	DeleteBrand(ctx context.Context, id uuid.UUID) error
+	DeleteBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 }

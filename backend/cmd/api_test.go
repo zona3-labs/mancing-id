@@ -307,6 +307,237 @@ func TestCategoryPublicLifecycleThroughHTTP(t *testing.T) {
 	}
 }
 
+func TestBrandLifecycleThroughHTTP(t *testing.T) {
+	db := openIntegrationDatabase(t)
+	defer db.Close()
+	if err := migrations.Reset(db); err != nil {
+		t.Fatalf("reset migrations: %v", err)
+	}
+
+	api := (&application{db: db, config: &config.Config{HttpServer: &config.HttpserverConfig{}}}).mount()
+	created := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands", map[string]any{
+		"name": "Acme Fishing",
+		"slug": "acme",
+	})
+	if created.status != http.StatusCreated {
+		t.Fatalf("create brand status = %d, body = %s", created.status, created.body)
+	}
+	var createdBody struct {
+		Data struct {
+			ID      string `json:"id"`
+			Name    string `json:"name"`
+			Slug    string `json:"slug"`
+			Status  string `json:"status"`
+			Version int64  `json:"version"`
+		} `json:"data"`
+	}
+	decodeJSON(t, created.body, &createdBody)
+	if createdBody.Data.Name != "Acme Fishing" || createdBody.Data.Slug != "acme" || createdBody.Data.Status != "draft" || createdBody.Data.Version != 1 {
+		t.Fatalf("created brand = %s", created.body)
+	}
+
+	draftPublicRead := requestJSON(t, api, http.MethodGet, "/api/v1/brands/acme", nil)
+	if draftPublicRead.status != http.StatusNotFound || draftPublicRead.contentType != "application/problem+json" {
+		t.Fatalf("draft public brand = %#v", draftPublicRead)
+	}
+	draftPublicCollection := requestJSON(t, api, http.MethodGet, "/api/v1/brands", nil)
+	if draftPublicCollection.status != http.StatusOK || bytes.Contains(draftPublicCollection.body, []byte(`"slug":"acme"`)) {
+		t.Fatalf("draft public brand collection = %#v", draftPublicCollection)
+	}
+
+	updated := requestJSON(t, api, http.MethodPut, "/api/v1/admin/brands/"+createdBody.Data.ID, map[string]any{
+		"name":    "Acme Tackle",
+		"version": 1,
+	})
+	if updated.status != http.StatusOK {
+		t.Fatalf("update brand status = %d, body = %s", updated.status, updated.body)
+	}
+	var updatedBody struct {
+		Data struct {
+			Name    string `json:"name"`
+			Slug    string `json:"slug"`
+			Status  string `json:"status"`
+			Version int64  `json:"version"`
+		} `json:"data"`
+	}
+	decodeJSON(t, updated.body, &updatedBody)
+	if updatedBody.Data.Name != "Acme Tackle" || updatedBody.Data.Slug != "acme-tackle" || updatedBody.Data.Status != "draft" || updatedBody.Data.Version != 2 {
+		t.Fatalf("updated brand = %s", updated.body)
+	}
+
+	var wg sync.WaitGroup
+	results := make(chan httpResult, 2)
+	for _, name := range []string{"Acme Rods", "Acme Lines"} {
+		wg.Add(1)
+		go func(name string) {
+			defer wg.Done()
+			results <- requestJSON(t, api, http.MethodPut, "/api/v1/admin/brands/"+createdBody.Data.ID, map[string]any{
+				"name":    name,
+				"version": 2,
+			})
+		}(name)
+	}
+	wg.Wait()
+	close(results)
+	var success, conflict int
+	for result := range results {
+		switch result.status {
+		case http.StatusOK:
+			success++
+		case http.StatusConflict:
+			conflict++
+			if result.contentType != "application/problem+json" {
+				t.Errorf("brand conflict content type = %q", result.contentType)
+			}
+		default:
+			t.Errorf("unexpected concurrent brand update = %#v", result)
+		}
+	}
+	if success != 1 || conflict != 1 {
+		t.Fatalf("concurrent brand updates: success=%d conflict=%d", success, conflict)
+	}
+	currentRead := requestJSON(t, api, http.MethodGet, "/api/v1/admin/brands/"+createdBody.Data.ID, nil)
+	if currentRead.status != http.StatusOK {
+		t.Fatalf("current brand status = %d, body = %s", currentRead.status, currentRead.body)
+	}
+	var currentBody struct {
+		Data struct {
+			Slug string `json:"slug"`
+		} `json:"data"`
+	}
+	decodeJSON(t, currentRead.body, &currentBody)
+
+	activated := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands/"+createdBody.Data.ID+"/activate", map[string]any{"version": 3})
+	if activated.status != http.StatusNoContent {
+		t.Fatalf("activate brand status = %d, body = %s", activated.status, activated.body)
+	}
+
+	publicRead := requestJSON(t, api, http.MethodGet, "/api/v1/brands/"+currentBody.Data.Slug, nil)
+	if publicRead.status != http.StatusOK {
+		t.Fatalf("active public brand status = %d, body = %s", publicRead.status, publicRead.body)
+	}
+	var publicBody struct {
+		Data struct {
+			Status  string `json:"status"`
+			Version int64  `json:"version"`
+		} `json:"data"`
+	}
+	decodeJSON(t, publicRead.body, &publicBody)
+	if publicBody.Data.Status != "active" || publicBody.Data.Version != 4 {
+		t.Fatalf("active public brand = %s", publicRead.body)
+	}
+	reserved := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands", map[string]any{
+		"name": "Replacement Brand",
+		"slug": currentBody.Data.Slug,
+	})
+	if reserved.status != http.StatusCreated {
+		t.Fatalf("reserved slug brand status = %d, body = %s", reserved.status, reserved.body)
+	}
+	var reservedBody struct {
+		Data struct {
+			ID   string `json:"id"`
+			Slug string `json:"slug"`
+		} `json:"data"`
+	}
+	decodeJSON(t, reserved.body, &reservedBody)
+	if reservedBody.Data.Slug == currentBody.Data.Slug {
+		t.Fatalf("published brand slug was reused: %s", reserved.body)
+	}
+	reservedDelete := requestJSON(t, api, http.MethodDelete, "/api/v1/admin/brands/"+reservedBody.Data.ID, map[string]any{"version": 1})
+	if reservedDelete.status != http.StatusNoContent {
+		t.Fatalf("delete reserved slug brand status = %d, body = %s", reservedDelete.status, reservedDelete.body)
+	}
+
+	staleUpdate := requestJSON(t, api, http.MethodPut, "/api/v1/admin/brands/"+createdBody.Data.ID, map[string]any{
+		"name":    "Stale Acme",
+		"version": 2,
+	})
+	if staleUpdate.status != http.StatusConflict {
+		t.Fatalf("stale brand update = %#v", staleUpdate)
+	}
+
+	deactivated := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands/"+createdBody.Data.ID+"/deactivate", map[string]any{"version": 4})
+	if deactivated.status != http.StatusNoContent {
+		t.Fatalf("deactivate brand status = %d, body = %s", deactivated.status, deactivated.body)
+	}
+	inactivePublicRead := requestJSON(t, api, http.MethodGet, "/api/v1/brands/"+currentBody.Data.Slug, nil)
+	if inactivePublicRead.status != http.StatusOK {
+		t.Fatalf("inactive public brand status = %d, body = %s", inactivePublicRead.status, inactivePublicRead.body)
+	}
+	decodeJSON(t, inactivePublicRead.body, &publicBody)
+	if publicBody.Data.Status != "inactive" || publicBody.Data.Version != 5 {
+		t.Fatalf("inactive public brand = %s", inactivePublicRead.body)
+	}
+
+	updatedInactive := requestJSON(t, api, http.MethodPut, "/api/v1/admin/brands/"+createdBody.Data.ID, map[string]any{
+		"name":    "Renamed Acme",
+		"version": 5,
+	})
+	if updatedInactive.status != http.StatusConflict {
+		t.Fatalf("inactive brand update = %#v", updatedInactive)
+	}
+
+	reactivated := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands/"+createdBody.Data.ID+"/reactivate", map[string]any{"version": 5})
+	if reactivated.status != http.StatusNoContent {
+		t.Fatalf("reactivate brand status = %d, body = %s", reactivated.status, reactivated.body)
+	}
+
+	changedPublishedSlug := requestJSON(t, api, http.MethodPut, "/api/v1/admin/brands/"+createdBody.Data.ID, map[string]any{
+		"name":    "Renamed Acme",
+		"slug":    "renamed-acme",
+		"version": 6,
+	})
+	if changedPublishedSlug.status != http.StatusConflict {
+		t.Fatalf("published brand update = %#v", changedPublishedSlug)
+	}
+
+	referencedDraft := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands", map[string]any{"name": "Referenced Brand"})
+	if referencedDraft.status != http.StatusCreated {
+		t.Fatalf("create referenced brand status = %d, body = %s", referencedDraft.status, referencedDraft.body)
+	}
+	var referencedBody struct {
+		Data struct {
+			ID      string `json:"id"`
+			Version int64  `json:"version"`
+		} `json:"data"`
+	}
+	decodeJSON(t, referencedDraft.body, &referencedBody)
+	product := requestJSON(t, api, http.MethodPost, "/api/v1/products", map[string]any{
+		"name":     "Referenced Product",
+		"status":   "draft",
+		"brand_id": referencedBody.Data.ID,
+	})
+	if product.status != http.StatusCreated {
+		t.Fatalf("create referenced product status = %d, body = %s", product.status, product.body)
+	}
+	referencedDelete := requestJSON(t, api, http.MethodDelete, "/api/v1/admin/brands/"+referencedBody.Data.ID, map[string]any{"version": referencedBody.Data.Version})
+	if referencedDelete.status != http.StatusConflict {
+		t.Fatalf("delete referenced brand = %#v", referencedDelete)
+	}
+
+	deletableDraft := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands", map[string]any{"name": "Disposable Brand"})
+	if deletableDraft.status != http.StatusCreated {
+		t.Fatalf("create deletable brand status = %d, body = %s", deletableDraft.status, deletableDraft.body)
+	}
+	var deletableBody struct {
+		Data struct {
+			ID      string `json:"id"`
+			Slug    string `json:"slug"`
+			Version int64  `json:"version"`
+		} `json:"data"`
+	}
+	decodeJSON(t, deletableDraft.body, &deletableBody)
+	deleted := requestJSON(t, api, http.MethodDelete, "/api/v1/admin/brands/"+deletableBody.Data.ID, map[string]any{"version": deletableBody.Data.Version})
+	if deleted.status != http.StatusNoContent {
+		t.Fatalf("delete draft brand status = %d, body = %s", deleted.status, deleted.body)
+	}
+
+	missing := requestJSON(t, api, http.MethodGet, "/api/v1/admin/brands/00000000-0000-0000-0000-000000000000", nil)
+	if missing.status != http.StatusNotFound || missing.contentType != "application/problem+json" {
+		t.Fatalf("missing brand = %#v", missing)
+	}
+}
+
 func TestProductUpdateTargetsRequestedProductThroughHTTP(t *testing.T) {
 	db := openIntegrationDatabase(t)
 	defer db.Close()

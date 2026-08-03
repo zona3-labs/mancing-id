@@ -12,9 +12,38 @@ import (
 	"github.com/google/uuid"
 )
 
-const createBrand = `-- name: CreateBrand :exec
-INSERT INTO brands (id, name, slug, logo_path, is_active, created_at, updated_at, deleted_at)
-VALUES ($1, $2, $3, $4, TRUE, NOW(), NOW(), NULL)
+const activateBrand = `-- name: ActivateBrand :execresult
+UPDATE brands
+SET status = 'active', version = version + 1, updated_at = NOW()
+WHERE id = $1 AND status = 'draft' AND version = $2 AND deleted_at IS NULL
+`
+
+type ActivateBrandParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) ActivateBrand(ctx context.Context, arg ActivateBrandParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, activateBrand, arg.ID, arg.Version)
+}
+
+const countProductsByBrandID = `-- name: CountProductsByBrandID :one
+SELECT COUNT(*)
+FROM products
+WHERE brand_id = $1
+`
+
+func (q *Queries) CountProductsByBrandID(ctx context.Context, brandID uuid.NullUUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countProductsByBrandID, brandID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createBrand = `-- name: CreateBrand :one
+INSERT INTO brands (id, name, slug, logo_path, status, version, created_at, updated_at, deleted_at)
+VALUES ($1, $2, $3, $4, 'draft', 1, NOW(), NOW(), NULL)
+RETURNING id, name, slug, logo_path, status, version, created_at, updated_at, deleted_at
 `
 
 type CreateBrandParams struct {
@@ -24,29 +53,64 @@ type CreateBrandParams struct {
 	LogoPath *string   `json:"logo_path"`
 }
 
-func (q *Queries) CreateBrand(ctx context.Context, arg CreateBrandParams) error {
-	_, err := q.db.ExecContext(ctx, createBrand,
+func (q *Queries) CreateBrand(ctx context.Context, arg CreateBrandParams) (Brand, error) {
+	row := q.db.QueryRowContext(ctx, createBrand,
 		arg.ID,
 		arg.Name,
 		arg.Slug,
 		arg.LogoPath,
 	)
-	return err
+	var i Brand
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.LogoPath,
+		&i.Status,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const deactivateBrand = `-- name: DeactivateBrand :execresult
+UPDATE brands
+SET status = 'inactive', version = version + 1, updated_at = NOW()
+WHERE id = $1 AND status = 'active' AND version = $2 AND deleted_at IS NULL
+`
+
+type DeactivateBrandParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) DeactivateBrand(ctx context.Context, arg DeactivateBrandParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, deactivateBrand, arg.ID, arg.Version)
 }
 
 const deleteBrand = `-- name: DeleteBrand :execresult
 UPDATE brands
-SET deleted_at = NOW(),
-    updated_at = NOW()
-WHERE id = $1 AND deleted_at IS NULL
+SET deleted_at = NOW(), version = version + 1, updated_at = NOW()
+WHERE brands.id = $1
+  AND brands.status = 'draft'
+  AND brands.version = $2
+  AND brands.deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM products WHERE products.brand_id = brands.id)
 `
 
-func (q *Queries) DeleteBrand(ctx context.Context, id uuid.UUID) (sql.Result, error) {
-	return q.db.ExecContext(ctx, deleteBrand, id)
+type DeleteBrandParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) DeleteBrand(ctx context.Context, arg DeleteBrandParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, deleteBrand, arg.ID, arg.Version)
 }
 
 const getAllBrands = `-- name: GetAllBrands :many
-SELECT id, name, slug, logo_path, is_active, created_at, updated_at, deleted_at
+SELECT id, name, slug, logo_path, status, version, created_at, updated_at, deleted_at
 FROM brands
 WHERE deleted_at IS NULL
 ORDER BY created_at DESC
@@ -66,7 +130,8 @@ func (q *Queries) GetAllBrands(ctx context.Context) ([]Brand, error) {
 			&i.Name,
 			&i.Slug,
 			&i.LogoPath,
-			&i.IsActive,
+			&i.Status,
+			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -84,8 +149,31 @@ func (q *Queries) GetAllBrands(ctx context.Context) ([]Brand, error) {
 	return items, nil
 }
 
+const getBrandByID = `-- name: GetBrandByID :one
+SELECT id, name, slug, logo_path, status, version, created_at, updated_at, deleted_at
+FROM brands
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetBrandByID(ctx context.Context, id uuid.UUID) (Brand, error) {
+	row := q.db.QueryRowContext(ctx, getBrandByID, id)
+	var i Brand
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.LogoPath,
+		&i.Status,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const getBrandBySlug = `-- name: GetBrandBySlug :one
-SELECT id, name, slug, logo_path, is_active, created_at, updated_at, deleted_at
+SELECT id, name, slug, logo_path, status, version, created_at, updated_at, deleted_at
 FROM brands
 WHERE slug = $1 AND deleted_at IS NULL
 `
@@ -98,7 +186,8 @@ func (q *Queries) GetBrandBySlug(ctx context.Context, slug string) (Brand, error
 		&i.Name,
 		&i.Slug,
 		&i.LogoPath,
-		&i.IsActive,
+		&i.Status,
+		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -106,14 +195,96 @@ func (q *Queries) GetBrandBySlug(ctx context.Context, slug string) (Brand, error
 	return i, err
 }
 
-const updateBrand = `-- name: UpdateBrand :execresult
+const getPublicBrandBySlug = `-- name: GetPublicBrandBySlug :one
+SELECT id, name, slug, logo_path, status, version, created_at, updated_at, deleted_at
+FROM brands
+WHERE slug = $1 AND status IN ('active', 'inactive') AND deleted_at IS NULL
+`
+
+func (q *Queries) GetPublicBrandBySlug(ctx context.Context, slug string) (Brand, error) {
+	row := q.db.QueryRowContext(ctx, getPublicBrandBySlug, slug)
+	var i Brand
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.LogoPath,
+		&i.Status,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getPublicBrands = `-- name: GetPublicBrands :many
+SELECT id, name, slug, logo_path, status, version, created_at, updated_at, deleted_at
+FROM brands
+WHERE status IN ('active', 'inactive') AND deleted_at IS NULL
+ORDER BY created_at DESC
+`
+
+func (q *Queries) GetPublicBrands(ctx context.Context) ([]Brand, error) {
+	rows, err := q.db.QueryContext(ctx, getPublicBrands)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Brand{}
+	for rows.Next() {
+		var i Brand
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.LogoPath,
+			&i.Status,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const reactivateBrand = `-- name: ReactivateBrand :execresult
+UPDATE brands
+SET status = 'active', version = version + 1, updated_at = NOW()
+WHERE id = $1 AND status = 'inactive' AND version = $2 AND deleted_at IS NULL
+`
+
+type ReactivateBrandParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) ReactivateBrand(ctx context.Context, arg ReactivateBrandParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, reactivateBrand, arg.ID, arg.Version)
+}
+
+const updateBrand = `-- name: UpdateBrand :one
 UPDATE brands
 SET name = $2,
     slug = $3,
     logo_path = $4,
-    is_active = $5,
+    version = version + 1,
     updated_at = NOW()
-WHERE id = $1 AND deleted_at IS NULL
+WHERE brands.id = $1
+  AND status = 'draft'
+  AND version = $5
+  AND deleted_at IS NULL
+RETURNING id, name, slug, logo_path, status, version, created_at, updated_at, deleted_at
 `
 
 type UpdateBrandParams struct {
@@ -121,23 +292,35 @@ type UpdateBrandParams struct {
 	Name     string    `json:"name"`
 	Slug     string    `json:"slug"`
 	LogoPath *string   `json:"logo_path"`
-	IsActive bool      `json:"is_active"`
+	Version  int64     `json:"version"`
 }
 
-func (q *Queries) UpdateBrand(ctx context.Context, arg UpdateBrandParams) (sql.Result, error) {
-	return q.db.ExecContext(ctx, updateBrand,
+func (q *Queries) UpdateBrand(ctx context.Context, arg UpdateBrandParams) (Brand, error) {
+	row := q.db.QueryRowContext(ctx, updateBrand,
 		arg.ID,
 		arg.Name,
 		arg.Slug,
 		arg.LogoPath,
-		arg.IsActive,
+		arg.Version,
 	)
+	var i Brand
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.LogoPath,
+		&i.Status,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const updateBrandLogo = `-- name: UpdateBrandLogo :execresult
 UPDATE brands
-SET logo_path  = $2,
-    updated_at = NOW()
+SET logo_path = $2, updated_at = NOW()
 WHERE id = $1 AND deleted_at IS NULL
 `
 

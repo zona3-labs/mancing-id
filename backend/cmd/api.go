@@ -66,6 +66,7 @@ func (app *application) registerV1Routes(v1 *gin.RouterGroup) {
 	brandUsecase := brand.NewBrandUsecase(brandRepo, app.uploader)
 	brandHandler := brand.NewBrandHandler(brandUsecase)
 	brandHandler.RegisterRoutes(v1)
+	brandHandler.RegisterAdminRoutes(v1)
 
 	// Product
 	productRepo := product.NewProductRepository(app.db)

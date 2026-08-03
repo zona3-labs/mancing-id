@@ -1,7 +1,9 @@
 package brand
 
 import (
+	"context"
 	"errors"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -19,10 +21,19 @@ func NewBrandHandler(usecase BrandUsecase) *BrandHandler {
 
 func (h *BrandHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	brands := rg.Group("/brands")
+	brands.GET("", h.GetPublicBrands)
+	brands.GET("/:slug", h.GetPublicBrandBySlug)
+}
+
+func (h *BrandHandler) RegisterAdminRoutes(rg *gin.RouterGroup) {
+	brands := rg.Group("/admin/brands")
 	brands.POST("", h.CreateBrand)
-	brands.GET("", h.GetAllBrand)
-	brands.GET("/:slug", h.GetBrandBySlug)
+	brands.GET("", h.GetAllBrands)
+	brands.GET("/:identifier", h.GetAdminBrand)
 	brands.PUT("/:id", h.UpdateBrand)
+	brands.POST("/:id/activate", h.ActivateBrand)
+	brands.POST("/:id/deactivate", h.DeactivateBrand)
+	brands.POST("/:id/reactivate", h.ReactivateBrand)
 	brands.POST("/:id/logo", h.UploadBrandLogo)
 	brands.DELETE("/:id", h.DeleteBrand)
 }
@@ -37,184 +48,144 @@ type updateBrandRequest struct {
 	Name     string  `json:"name" binding:"required"`
 	Slug     string  `json:"slug"`
 	LogoPath *string `json:"logo_path"`
-	IsActive bool    `json:"is_active"`
+	Version  *int64  `json:"version"`
 }
 
-// CreateBrand godoc
-// @Summary      Create a new brand
-// @Description  Create a new brand with name, slug, and logo path
-// @Tags         brands
-// @Accept       json
-// @Produce      json
-// @Param        request body createBrandRequest true "Brand details"
-// @Success      201  {object}  response.Envelope{data=Brand}
-// @Failure      400  {object}  response.ErrorEnvelope
-// @Failure      500  {object}  response.ErrorEnvelope
-// @Router       /brands [post]
+type brandVersionRequest struct {
+	Version *int64 `json:"version"`
+}
+
 func (h *BrandHandler) CreateBrand(c *gin.Context) {
 	var req createBrandRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+		response.Problem(c, http.StatusBadRequest, "invalid_request", "Invalid Request", "brand name is required")
 		return
 	}
 
-	brand := &Brand{
-		Name:     req.Name,
-		Slug:     req.Slug,
-		LogoPath: req.LogoPath,
-	}
-
+	brand := &Brand{Name: req.Name, Slug: req.Slug, LogoPath: req.LogoPath}
 	if err := h.usecase.CreateBrand(c.Request.Context(), brand); err != nil {
-		response.InternalError(c, err)
+		h.writeError(c, err)
 		return
 	}
-
 	response.Created(c, brand)
 }
 
-// GetAllBrand godoc
-// @Summary      Get all brands
-// @Description  Retrieve all registered brands
-// @Tags         brands
-// @Produce      json
-// @Success      200  {object}  response.Envelope{data=[]Brand}
-// @Failure      500  {object}  response.ErrorEnvelope
-// @Router       /brands [get]
-func (h *BrandHandler) GetAllBrand(c *gin.Context) {
-	brands, err := h.usecase.GetAllBrand(c.Request.Context())
+func (h *BrandHandler) GetAllBrands(c *gin.Context) {
+	brands, err := h.usecase.GetAllBrands(c.Request.Context())
 	if err != nil {
 		response.InternalError(c, err)
 		return
 	}
-
 	response.OK(c, "brands retrieved successfully", brands)
 }
 
-// GetBrandBySlug godoc
-// @Summary      Get brand by slug
-// @Description  Get brand details by its unique URL slug
-// @Tags         brands
-// @Produce      json
-// @Param        slug  path      string  true  "Brand Slug"
-// @Success      200  {object}  response.Envelope{data=Brand}
-// @Failure      404  {object}  response.ErrorEnvelope
-// @Failure      500  {object}  response.ErrorEnvelope
-// @Router       /brands/{slug} [get]
-func (h *BrandHandler) GetBrandBySlug(c *gin.Context) {
-	slug := c.Param("slug")
-
-	brand, err := h.usecase.GetBrandBySlug(c.Request.Context(), slug)
+func (h *BrandHandler) GetPublicBrands(c *gin.Context) {
+	brands, err := h.usecase.GetPublicBrands(c.Request.Context())
 	if err != nil {
-		if errors.Is(err, ErrBrandNotFound) {
-			response.NotFound(c, "brand not found")
-			return
-		}
 		response.InternalError(c, err)
 		return
 	}
+	response.OK(c, "brands retrieved successfully", brands)
+}
 
+func (h *BrandHandler) GetAdminBrand(c *gin.Context) {
+	identifier := c.Param("identifier")
+	var brand *Brand
+	var err error
+	if id, parseErr := uuid.Parse(identifier); parseErr == nil {
+		brand, err = h.usecase.GetBrandByID(c.Request.Context(), id)
+	} else {
+		brand, err = h.usecase.GetBrandBySlug(c.Request.Context(), identifier)
+	}
+	if err != nil {
+		h.writeError(c, err)
+		return
+	}
 	response.OK(c, "brand retrieved successfully", brand)
 }
 
-// UpdateBrand godoc
-// @Summary      Update a brand
-// @Description  Update details of an existing brand by its ID
-// @Tags         brands
-// @Accept       json
-// @Produce      json
-// @Param        id    path      string                 true  "Brand ID (UUID)"
-// @Param        request body updateBrandRequest true  "Updated brand details"
-// @Success      200  {object}  response.Envelope{data=Brand}
-// @Failure      400  {object}  response.ErrorEnvelope
-// @Failure      404  {object}  response.ErrorEnvelope
-// @Failure      500  {object}  response.ErrorEnvelope
-// @Router       /brands/{id} [put]
-func (h *BrandHandler) UpdateBrand(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+func (h *BrandHandler) GetPublicBrandBySlug(c *gin.Context) {
+	brand, err := h.usecase.GetPublicBrandBySlug(c.Request.Context(), c.Param("slug"))
 	if err != nil {
-		response.BadRequest(c, "invalid brand id")
+		h.writeError(c, err)
 		return
 	}
+	response.OK(c, "brand retrieved successfully", brand)
+}
 
+func (h *BrandHandler) UpdateBrand(c *gin.Context) {
+	id, err := parseBrandID(c)
+	if err != nil {
+		return
+	}
 	var req updateBrandRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+	if err := c.ShouldBindJSON(&req); err != nil || req.Version == nil {
+		response.Problem(c, http.StatusBadRequest, "brand_version_required", "Version Required", "brand version is required")
 		return
 	}
 
-	brand := &Brand{
-		ID:       id,
-		Name:     req.Name,
-		Slug:     req.Slug,
-		LogoPath: req.LogoPath,
-		IsActive: req.IsActive,
-	}
-
-	if err := h.usecase.UpdateBrand(c.Request.Context(), brand); err != nil {
-		if errors.Is(err, ErrBrandNotFound) {
-			response.NotFound(c, "brand not found")
-			return
-		}
-		response.InternalError(c, err)
+	brand := &Brand{ID: id, Name: req.Name, Slug: req.Slug, LogoPath: req.LogoPath}
+	if err := h.usecase.UpdateBrand(c.Request.Context(), brand, *req.Version); err != nil {
+		h.writeError(c, err)
 		return
 	}
-
 	response.OK(c, "brand updated successfully", brand)
 }
 
-// DeleteBrand godoc
-// @Summary      Delete a brand
-// @Description  Soft delete an existing brand by its ID
-// @Tags         brands
-// @Produce      json
-// @Param        id    path      string  true  "Brand ID (UUID)"
-// @Success      204  "No Content"
-// @Failure      400  {object}  response.ErrorEnvelope
-// @Failure      404  {object}  response.ErrorEnvelope
-// @Failure      500  {object}  response.ErrorEnvelope
-// @Router       /brands/{id} [delete]
-func (h *BrandHandler) DeleteBrand(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+func (h *BrandHandler) ActivateBrand(c *gin.Context) {
+	h.transitionBrand(c, h.usecase.ActivateBrand)
+}
+
+func (h *BrandHandler) DeactivateBrand(c *gin.Context) {
+	h.transitionBrand(c, h.usecase.DeactivateBrand)
+}
+
+func (h *BrandHandler) ReactivateBrand(c *gin.Context) {
+	h.transitionBrand(c, h.usecase.ReactivateBrand)
+}
+
+func (h *BrandHandler) transitionBrand(c *gin.Context, transition func(context.Context, uuid.UUID, int64) error) {
+	id, err := parseBrandID(c)
 	if err != nil {
-		response.BadRequest(c, "invalid brand id")
 		return
 	}
-
-	if err := h.usecase.DeleteBrand(c.Request.Context(), id); err != nil {
-		if errors.Is(err, ErrBrandNotFound) {
-			response.NotFound(c, "brand not found")
-			return
-		}
-		response.InternalError(c, err)
+	var req brandVersionRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.Version == nil {
+		response.Problem(c, http.StatusBadRequest, "brand_version_required", "Version Required", "brand version is required")
 		return
 	}
-
+	if err := transition(c.Request.Context(), id, *req.Version); err != nil {
+		h.writeError(c, err)
+		return
+	}
 	response.NoContent(c)
 }
 
-// UploadBrandLogo godoc
-// @Summary      Upload brand logo
-// @Description  Upload logo image for an existing brand
-// @Tags         brands
-// @Accept       multipart/form-data
-// @Produce      json
-// @Param        id    path      string  true  "Brand ID (UUID)"
-// @Param        logo  formData  file    true  "Logo image file"
-// @Success      200  {object}  response.Envelope{data=map[string]string} "logo_path response"
-// @Failure      400  {object}  response.ErrorEnvelope
-// @Failure      404  {object}  response.ErrorEnvelope
-// @Failure      500  {object}  response.ErrorEnvelope
-// @Router       /brands/{id}/logo [post]
-func (h *BrandHandler) UploadBrandLogo(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
+func (h *BrandHandler) DeleteBrand(c *gin.Context) {
+	id, err := parseBrandID(c)
 	if err != nil {
-		response.BadRequest(c, "invalid brand id")
 		return
 	}
+	var req brandVersionRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.Version == nil {
+		response.Problem(c, http.StatusBadRequest, "brand_version_required", "Version Required", "brand version is required")
+		return
+	}
+	if err := h.usecase.DeleteBrand(c.Request.Context(), id, *req.Version); err != nil {
+		h.writeError(c, err)
+		return
+	}
+	response.NoContent(c)
+}
 
+func (h *BrandHandler) UploadBrandLogo(c *gin.Context) {
+	id, err := parseBrandID(c)
+	if err != nil {
+		return
+	}
 	file, header, err := c.Request.FormFile("logo")
 	if err != nil {
-		response.BadRequest(c, "logo field is required")
+		response.Problem(c, http.StatusBadRequest, "logo_required", "Logo Required", "logo field is required")
 		return
 	}
 	defer file.Close()
@@ -222,17 +193,37 @@ func (h *BrandHandler) UploadBrandLogo(c *gin.Context) {
 	url, err := h.usecase.UploadBrandLogo(c.Request.Context(), id, file, header)
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrBrandNotFound):
-			response.NotFound(c, "brand not found")
-		case errors.Is(err, upload.ErrInvalidFileType):
-			response.BadRequest(c, err.Error())
-		case errors.Is(err, upload.ErrFileTooLarge):
-			response.BadRequest(c, err.Error())
+		case errors.Is(err, upload.ErrInvalidFileType), errors.Is(err, upload.ErrFileTooLarge):
+			response.Problem(c, http.StatusBadRequest, "invalid_logo", "Invalid Logo", err.Error())
 		default:
-			response.InternalError(c, err)
+			h.writeError(c, err)
 		}
 		return
 	}
-
 	response.OK(c, "logo uploaded successfully", gin.H{"logo_path": url})
+}
+
+func parseBrandID(c *gin.Context) (uuid.UUID, error) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Problem(c, http.StatusBadRequest, "invalid_brand_id", "Invalid Brand ID", "brand id must be a UUID")
+	}
+	return id, err
+}
+
+func (h *BrandHandler) writeError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, ErrBrandNotFound):
+		response.Problem(c, http.StatusNotFound, "brand_not_found", "Brand Not Found", "the brand does not exist")
+	case errors.Is(err, ErrBrandVersionConflict):
+		response.Problem(c, http.StatusConflict, "brand_version_conflict", "Brand Version Conflict", "the brand was changed by another request")
+	case errors.Is(err, ErrBrandHasProducts):
+		response.Problem(c, http.StatusConflict, "brand_has_products", "Brand Has Products", "only an unreferenced draft brand can be deleted")
+	case errors.Is(err, ErrBrandNotEditable):
+		response.Problem(c, http.StatusConflict, "brand_not_editable", "Brand Not Editable", "only a draft brand can be changed or deleted")
+	case errors.Is(err, ErrInvalidBrand):
+		response.Problem(c, http.StatusBadRequest, "invalid_brand", "Invalid Brand", "brand name must contain letters or numbers")
+	default:
+		response.InternalError(c, err)
+	}
 }
