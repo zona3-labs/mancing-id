@@ -15,18 +15,19 @@ import (
 type BrandHandler struct {
 	usecase     BrandUsecase
 	logoService BrandLogoService
+	deletion    BrandDeletionService
 }
 
 type BrandLogoService interface {
 	UploadBrandLogo(context.Context, uuid.UUID, multipart.File, *multipart.FileHeader) (string, error)
 }
 
-func NewBrandHandler(usecase BrandUsecase, logoServices ...BrandLogoService) *BrandHandler {
-	var logoService BrandLogoService
-	if len(logoServices) > 0 {
-		logoService = logoServices[0]
-	}
-	return &BrandHandler{usecase: usecase, logoService: logoService}
+type BrandDeletionService interface {
+	DeleteBrand(context.Context, uuid.UUID, int64) error
+}
+
+func NewBrandHandler(usecase BrandUsecase, logoService BrandLogoService, deletion BrandDeletionService) *BrandHandler {
+	return &BrandHandler{usecase: usecase, logoService: logoService, deletion: deletion}
 }
 
 func (h *BrandHandler) RegisterRoutes(rg *gin.RouterGroup) {
@@ -189,7 +190,7 @@ func (h *BrandHandler) DeleteBrand(c *gin.Context) {
 		response.Problem(c, http.StatusBadRequest, "brand_version_required", "Version Required", "brand version is required")
 		return
 	}
-	if err := h.usecase.DeleteBrand(c.Request.Context(), id, *req.Version); err != nil {
+	if err := h.deletion.DeleteBrand(c.Request.Context(), id, *req.Version); err != nil {
 		h.writeError(c, err)
 		return
 	}

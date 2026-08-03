@@ -78,9 +78,17 @@ type ProductImage struct {
 
 type ProductDetail struct {
 	Product
+	Brand    *BrandSummary              `json:"brand,omitempty"`
 	Options  []*ProductOptionWithValues `json:"options"`
 	Images   []*ProductImage            `json:"images"`
 	Variants []*ProductVariantDetail    `json:"variants"`
+}
+
+type BrandSummary struct {
+	ID       uuid.UUID `json:"id"`
+	Name     string    `json:"name"`
+	Slug     string    `json:"slug"`
+	LogoPath *string   `json:"logo_path,omitempty"`
 }
 
 type VariantStatus string

@@ -72,14 +72,23 @@ func (app *application) registerV1Routes(v1 *gin.RouterGroup) {
 		txManager = transaction.NewSQLManager(app.db)
 	}
 	brandLogoService := catalog.NewBrandLogoService(brandRepo, app.media, txManager)
-	brandHandler := brand.NewBrandHandler(brandUsecase, brandLogoService)
+	catalogBrandRepo := brand.NewCatalogBrandRepository(app.db)
+	catalogProductRepo := product.NewProductReferenceRepository(app.db)
+	brandDeletionService := catalog.NewBrandDeletionService(catalogBrandRepo, catalogProductRepo, txManager)
+	brandHandler := brand.NewBrandHandler(brandUsecase, brandLogoService, brandDeletionService)
 	brandHandler.RegisterRoutes(v1)
 	brandHandler.RegisterAdminRoutes(v1)
 
 	// Product
 	productRepo := product.NewProductRepository(app.db)
 	productUsecase := product.NewProductUsecase(productRepo)
-	productHandler := product.NewProductHandler(productUsecase)
+	productService := catalog.NewProductService(
+		catalogBrandRepo,
+		productUsecase,
+		product.NewDraftProductRepository(app.db),
+		txManager,
+	)
+	productHandler := product.NewProductHandler(productUsecase, productService)
 	productHandler.RegisterRoutes(v1)
 }
 

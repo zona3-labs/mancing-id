@@ -20,7 +20,6 @@ type BrandUsecase interface {
 	ActivateBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 	DeactivateBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 	ReactivateBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
-	DeleteBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 }
 
 type brandUsecase struct {
@@ -137,25 +136,4 @@ func (b brandUsecase) transition(ctx context.Context, id uuid.UUID, expectedVers
 		return ErrBrandNotEditable
 	}
 	return mutate(ctx, id, expectedVersion)
-}
-
-func (b brandUsecase) DeleteBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error {
-	brand, err := b.repo.GetBrandByID(ctx, id)
-	if err != nil {
-		return err
-	}
-	if brand.Version != expectedVersion {
-		return ErrBrandVersionConflict
-	}
-	if brand.Status != BrandStatusDraft {
-		return ErrBrandNotEditable
-	}
-	products, err := b.repo.CountProductsByBrandID(ctx, id)
-	if err != nil {
-		return err
-	}
-	if products > 0 {
-		return ErrBrandHasProducts
-	}
-	return b.repo.DeleteBrand(ctx, id, expectedVersion)
 }

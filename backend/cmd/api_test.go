@@ -675,6 +675,10 @@ func TestBrandLifecycleThroughHTTP(t *testing.T) {
 		} `json:"data"`
 	}
 	decodeJSON(t, referencedDraft.body, &referencedBody)
+	referencedActivated := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands/"+referencedBody.Data.ID+"/activate", map[string]any{"version": referencedBody.Data.Version})
+	if referencedActivated.status != http.StatusNoContent {
+		t.Fatalf("activate referenced brand status = %d, body = %s", referencedActivated.status, referencedActivated.body)
+	}
 	product := requestJSON(t, api, http.MethodPost, "/api/v1/products", map[string]any{
 		"name":     "Referenced Product",
 		"status":   "draft",
@@ -827,9 +831,25 @@ func TestProductUpdateTargetsRequestedProductThroughHTTP(t *testing.T) {
 	}
 
 	api := (&application{db: db, config: &config.Config{HttpServer: &config.HttpserverConfig{}}}).mount()
+	brand := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands", map[string]any{"name": "Spinning Brand"})
+	if brand.status != http.StatusCreated {
+		t.Fatalf("create product brand status = %d, body = %s", brand.status, brand.body)
+	}
+	var brandBody struct {
+		Data struct {
+			ID      string `json:"id"`
+			Version int64  `json:"version"`
+		} `json:"data"`
+	}
+	decodeJSON(t, brand.body, &brandBody)
+	activatedBrand := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands/"+brandBody.Data.ID+"/activate", map[string]any{"version": brandBody.Data.Version})
+	if activatedBrand.status != http.StatusNoContent {
+		t.Fatalf("activate product brand status = %d, body = %s", activatedBrand.status, activatedBrand.body)
+	}
 	created := requestJSON(t, api, http.MethodPost, "/api/v1/products", map[string]any{
-		"name":   "Spinning Reel",
-		"status": "draft",
+		"name":     "Spinning Reel",
+		"status":   "draft",
+		"brand_id": brandBody.Data.ID,
 	})
 	if created.status != http.StatusCreated {
 		t.Fatalf("create product status = %d, body = %s", created.status, created.body)
@@ -842,9 +862,10 @@ func TestProductUpdateTargetsRequestedProductThroughHTTP(t *testing.T) {
 	decodeJSON(t, created.body, &createdBody)
 
 	updated := requestJSON(t, api, http.MethodPut, "/api/v1/products/"+createdBody.Data.ID, map[string]any{
-		"name":    "Tournament Spinning Reel",
-		"status":  "draft",
-		"version": 1,
+		"name":     "Tournament Spinning Reel",
+		"status":   "draft",
+		"brand_id": brandBody.Data.ID,
+		"version":  1,
 	})
 	if updated.status != http.StatusOK {
 		t.Fatalf("update product status = %d, body = %s", updated.status, updated.body)
@@ -861,9 +882,10 @@ func TestProductUpdateTargetsRequestedProductThroughHTTP(t *testing.T) {
 		t.Fatalf("updated product = %s", updated.body)
 	}
 	stale := requestJSON(t, api, http.MethodPut, "/api/v1/products/"+createdBody.Data.ID, map[string]any{
-		"name":    "Stale Reel",
-		"status":  "draft",
-		"version": 1,
+		"name":     "Stale Reel",
+		"status":   "draft",
+		"brand_id": brandBody.Data.ID,
+		"version":  1,
 	})
 	if stale.status != http.StatusConflict {
 		t.Fatalf("stale product update = %#v", stale)
@@ -873,6 +895,185 @@ func TestProductUpdateTargetsRequestedProductThroughHTTP(t *testing.T) {
 	if read.status != http.StatusOK || !bytes.Contains(read.body, []byte("Tournament Spinning Reel")) {
 		t.Fatalf("updated product read = %#v", read)
 	}
+}
+
+func TestProductDraftBrandContractThroughHTTP(t *testing.T) {
+	db := openIntegrationDatabase(t)
+	defer db.Close()
+	if err := migrations.Reset(db); err != nil {
+		t.Fatalf("reset migrations: %v", err)
+	}
+
+	api := (&application{db: db, config: &config.Config{HttpServer: &config.HttpserverConfig{}}}).mount()
+	createdBrand := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands", map[string]any{"name": "Authoring Brand"})
+	if createdBrand.status != http.StatusCreated {
+		t.Fatalf("create brand status = %d, body = %s", createdBrand.status, createdBrand.body)
+	}
+	var brandBody struct {
+		Data struct {
+			ID      string `json:"id"`
+			Name    string `json:"name"`
+			Slug    string `json:"slug"`
+			Version int64  `json:"version"`
+		} `json:"data"`
+	}
+	decodeJSON(t, createdBrand.body, &brandBody)
+
+	draftBrand := requestJSON(t, api, http.MethodPost, "/api/v1/products", map[string]any{
+		"name": "Draft Brand Product", "status": "draft", "brand_id": brandBody.Data.ID,
+	})
+	assertProblem(t, draftBrand, http.StatusConflict, "brand_not_active")
+
+	missingBrand := requestJSON(t, api, http.MethodPost, "/api/v1/products", map[string]any{
+		"name": "Missing Brand Product", "status": "draft", "brand_id": "00000000-0000-0000-0000-000000000000",
+	})
+	assertProblem(t, missingBrand, http.StatusNotFound, "brand_not_found")
+
+	activated := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands/"+brandBody.Data.ID+"/activate", map[string]any{"version": brandBody.Data.Version})
+	if activated.status != http.StatusNoContent {
+		t.Fatalf("activate brand status = %d, body = %s", activated.status, activated.body)
+	}
+	deactivated := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands/"+brandBody.Data.ID+"/deactivate", map[string]any{"version": brandBody.Data.Version + 1})
+	if deactivated.status != http.StatusNoContent {
+		t.Fatalf("deactivate brand status = %d, body = %s", deactivated.status, deactivated.body)
+	}
+	inactiveBrand := requestJSON(t, api, http.MethodPost, "/api/v1/products", map[string]any{
+		"name": "Inactive Brand Product", "status": "draft", "brand_id": brandBody.Data.ID,
+	})
+	assertProblem(t, inactiveBrand, http.StatusConflict, "brand_not_active")
+	reactivated := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands/"+brandBody.Data.ID+"/reactivate", map[string]any{"version": brandBody.Data.Version + 2})
+	if reactivated.status != http.StatusNoContent {
+		t.Fatalf("reactivate brand status = %d, body = %s", reactivated.status, reactivated.body)
+	}
+
+	created := requestJSON(t, api, http.MethodPost, "/api/v1/products", map[string]any{
+		"name": "Authoring Reel", "slug": "authoring-reel", "status": "draft", "brand_id": brandBody.Data.ID,
+	})
+	if created.status != http.StatusCreated {
+		t.Fatalf("create product status = %d, body = %s", created.status, created.body)
+	}
+	var createdBody struct {
+		Data struct {
+			ID      string `json:"id"`
+			Slug    string `json:"slug"`
+			Status  string `json:"status"`
+			Version int64  `json:"version"`
+		} `json:"data"`
+	}
+	decodeJSON(t, created.body, &createdBody)
+	if createdBody.Data.Status != "draft" || createdBody.Data.Slug != "authoring-reel" || createdBody.Data.Version != 1 {
+		t.Fatalf("created product = %s", created.body)
+	}
+
+	detail := requestJSON(t, api, http.MethodGet, "/api/v1/products/"+createdBody.Data.ID, nil)
+	if detail.status != http.StatusOK {
+		t.Fatalf("product detail status = %d, body = %s", detail.status, detail.body)
+	}
+	var detailBody struct {
+		Data struct {
+			Brand struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+				Slug string `json:"slug"`
+			} `json:"brand"`
+		} `json:"data"`
+	}
+	decodeJSON(t, detail.body, &detailBody)
+	if detailBody.Data.Brand.ID != brandBody.Data.ID || detailBody.Data.Brand.Name != brandBody.Data.Name || detailBody.Data.Brand.Slug != brandBody.Data.Slug {
+		t.Fatalf("embedded brand = %s", detail.body)
+	}
+
+	updated := requestJSON(t, api, http.MethodPut, "/api/v1/products/"+createdBody.Data.ID, map[string]any{
+		"name": "Renamed Authoring Reel", "slug": "renamed-authoring-reel", "status": "draft",
+		"brand_id": brandBody.Data.ID, "version": 1,
+	})
+	if updated.status != http.StatusOK {
+		t.Fatalf("update product status = %d, body = %s", updated.status, updated.body)
+	}
+	var updatedBody struct {
+		Data struct {
+			ID      string `json:"id"`
+			Slug    string `json:"slug"`
+			Version int64  `json:"version"`
+		} `json:"data"`
+	}
+	decodeJSON(t, updated.body, &updatedBody)
+	if updatedBody.Data.ID != createdBody.Data.ID || updatedBody.Data.Slug != "renamed-authoring-reel" || updatedBody.Data.Version != 2 {
+		t.Fatalf("updated product = %s", updated.body)
+	}
+
+	stale := requestJSON(t, api, http.MethodPut, "/api/v1/products/"+createdBody.Data.ID, map[string]any{
+		"name": "Stale Authoring Reel", "status": "draft", "brand_id": brandBody.Data.ID, "version": 1,
+	})
+	assertProblem(t, stale, http.StatusConflict, "product_version_conflict")
+
+	missing := requestJSON(t, api, http.MethodPut, "/api/v1/products/00000000-0000-0000-0000-000000000000", map[string]any{
+		"name": "Missing", "status": "draft", "brand_id": brandBody.Data.ID, "version": 1,
+	})
+	assertProblem(t, missing, http.StatusNotFound, "product_not_found")
+
+	deleted := requestJSON(t, api, http.MethodDelete, "/api/v1/products/"+createdBody.Data.ID, map[string]any{"version": 2})
+	if deleted.status != http.StatusNoContent {
+		t.Fatalf("delete product status = %d, body = %s", deleted.status, deleted.body)
+	}
+	gone := requestJSON(t, api, http.MethodGet, "/api/v1/products/"+createdBody.Data.ID, nil)
+	assertProblem(t, gone, http.StatusNotFound, "product_not_found")
+}
+
+func TestProductCreationAndBrandDeletionCannotBypassDraftBrandRule(t *testing.T) {
+	db := openIntegrationDatabase(t)
+	defer db.Close()
+	if err := migrations.Reset(db); err != nil {
+		t.Fatalf("reset migrations: %v", err)
+	}
+
+	api := (&application{db: db, config: &config.Config{HttpServer: &config.HttpserverConfig{}}}).mount()
+	createdBrand := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands", map[string]any{"name": "Race Brand"})
+	if createdBrand.status != http.StatusCreated {
+		t.Fatalf("create race brand status = %d, body = %s", createdBrand.status, createdBrand.body)
+	}
+	var brandBody struct {
+		Data struct {
+			ID      string `json:"id"`
+			Version int64  `json:"version"`
+		} `json:"data"`
+	}
+	decodeJSON(t, createdBrand.body, &brandBody)
+
+	results := make(chan httpResult, 2)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		results <- requestJSON(t, api, http.MethodPost, "/api/v1/products", map[string]any{
+			"name": "Racing Product", "status": "draft", "brand_id": brandBody.Data.ID,
+		})
+	}()
+	go func() {
+		defer wg.Done()
+		results <- requestJSON(t, api, http.MethodDelete, "/api/v1/admin/brands/"+brandBody.Data.ID, map[string]any{"version": brandBody.Data.Version})
+	}()
+	wg.Wait()
+	close(results)
+
+	var productCreated, brandDeleted int
+	for result := range results {
+		switch result.status {
+		case http.StatusCreated:
+			productCreated++
+		case http.StatusNoContent:
+			brandDeleted++
+		case http.StatusConflict, http.StatusNotFound:
+		default:
+			t.Errorf("unexpected race result = %#v", result)
+		}
+	}
+	if productCreated != 0 || brandDeleted != 1 {
+		t.Fatalf("race results: product_created=%d brand_deleted=%d", productCreated, brandDeleted)
+	}
+
+	gone := requestJSON(t, api, http.MethodGet, "/api/v1/admin/brands/"+brandBody.Data.ID, nil)
+	assertProblem(t, gone, http.StatusNotFound, "brand_not_found")
 }
 
 type httpResult struct {

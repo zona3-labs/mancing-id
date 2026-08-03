@@ -18,7 +18,16 @@ type BrandRepository interface {
 	ActivateBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 	DeactivateBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 	ReactivateBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
-	CountProductsByBrandID(ctx context.Context, id uuid.UUID) (int64, error)
 	AssociateLogo(ctx context.Context, tx transaction.DBTX, id uuid.UUID, logoPath string) (*string, error)
-	DeleteBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
+}
+
+type ProductBrandRepository interface {
+	GetBrandByID(context.Context, uuid.UUID) (*Brand, error)
+	GetBrandByIDForUpdate(context.Context, transaction.DBTX, uuid.UUID) (*Brand, error)
+}
+
+type CatalogBrandRepository interface {
+	GetBrandByID(context.Context, uuid.UUID) (*Brand, error)
+	GetBrandByIDForUpdate(context.Context, transaction.DBTX, uuid.UUID) (*Brand, error)
+	DeleteBrandInTransaction(context.Context, transaction.DBTX, uuid.UUID, int64) error
 }

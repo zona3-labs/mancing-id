@@ -4,16 +4,34 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/zona3-labs/mancing-id/internal/transaction"
 )
+
+type DraftProductRepository interface {
+	CreateProductInTransaction(context.Context, transaction.DBTX, *Product) error
+	GetProductForUpdate(context.Context, transaction.DBTX, uuid.UUID) (*Product, error)
+	UpdateProductInTransaction(context.Context, transaction.DBTX, *Product) error
+	DeleteDraftProduct(context.Context, transaction.DBTX, uuid.UUID, int64) error
+}
+
+type ProductReferenceRepository interface {
+	CountProductsByBrandIDInTransaction(context.Context, transaction.DBTX, uuid.UUID) (int64, error)
+}
+
+type ProductCatalogService interface {
+	CreateProduct(context.Context, *Product) error
+	GetAllProducts(context.Context) ([]*Product, error)
+	GetProductBySlug(context.Context, string) (*ProductDetail, error)
+	GetProductDetailByID(context.Context, uuid.UUID) (*ProductDetail, error)
+	UpdateProduct(context.Context, *Product) error
+	DeleteProduct(context.Context, uuid.UUID, int64) error
+}
 
 type ProductRepository interface {
 	// Product
-	CreateProduct(ctx context.Context, Product *Product) error
 	GetAllProducts(ctx context.Context) ([]*Product, error)
 	GetProductBySlug(ctx context.Context, slug string) (*ProductDetail, error)
 	GetProductDetailByID(ctx context.Context, id uuid.UUID) (*ProductDetail, error)
-	UpdateProduct(ctx context.Context, Product *Product) error
-	DeleteProduct(ctx context.Context, id uuid.UUID) error
 
 	// Options
 	CreateProductOptionWithValues(ctx context.Context, option *ProductOption, values []*ProductOptionValue) (*ProductOptionWithValues, error)

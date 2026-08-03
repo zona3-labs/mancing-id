@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	dberrors "github.com/zona3-labs/mancing-id/internal/errors"
 	productDb "github.com/zona3-labs/mancing-id/internal/product/db"
+	"github.com/zona3-labs/mancing-id/internal/transaction"
 )
 
 type productPostgresRepository struct {
@@ -17,6 +19,20 @@ type productPostgresRepository struct {
 
 func NewProductRepository(db *sql.DB) ProductRepository {
 	return &productPostgresRepository{db: db, queries: productDb.New(db)}
+}
+
+func NewDraftProductRepository(db *sql.DB) DraftProductRepository {
+	return &productPostgresRepository{db: db, queries: productDb.New(db)}
+}
+
+func NewProductReferenceRepository(db *sql.DB) ProductReferenceRepository {
+	return &productPostgresRepository{db: db, queries: productDb.New(db)}
+}
+
+func (p productPostgresRepository) CountProductsByBrandIDInTransaction(ctx context.Context, tx transaction.DBTX, brandID uuid.UUID) (int64, error) {
+	var count int64
+	err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM products WHERE brand_id = $1`, brandID).Scan(&count)
+	return count, err
 }
 
 func (p productPostgresRepository) CreateProduct(ctx context.Context, product *Product) error {
@@ -30,6 +46,85 @@ func (p productPostgresRepository) CreateProduct(ctx context.Context, product *P
 		BrandID:          product.BrandID,
 		IsFeatured:       product.IsFeature,
 	})
+}
+
+func (p productPostgresRepository) CreateProductInTransaction(ctx context.Context, tx transaction.DBTX, product *Product) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO products (id, name, slug, description, short_description, status, brand_id, is_featured, created_at, updated_at, deleted_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW(), NULL)`,
+		product.ID, product.Name, product.Slug, product.Description, product.ShortDescription,
+		product.Status, product.BrandID, product.IsFeature)
+	return err
+}
+
+func (p productPostgresRepository) GetProductForUpdate(ctx context.Context, tx transaction.DBTX, id uuid.UUID) (*Product, error) {
+	row := tx.QueryRowContext(ctx, `
+		SELECT id, name, slug, description, short_description, brand_id, status, version, is_featured, created_at, updated_at, deleted_at
+		FROM products
+		WHERE id = $1 AND deleted_at IS NULL
+		FOR UPDATE`, id)
+
+	var (
+		product   Product
+		status    string
+		deletedAt *time.Time
+	)
+	if err := row.Scan(
+		&product.ID, &product.Name, &product.Slug, &product.Description, &product.ShortDescription,
+		&product.BrandID, &status, &product.Version, &product.IsFeature, &product.CreatedAt,
+		&product.UpdatedAt, &deletedAt,
+	); err == sql.ErrNoRows {
+		return nil, ErrProductNotFound
+	} else if err != nil {
+		return nil, err
+	}
+	product.Status = ProductStatus(status)
+	product.DeletedAt = deletedAt
+	return &product, nil
+}
+
+func (p productPostgresRepository) UpdateProductInTransaction(ctx context.Context, tx transaction.DBTX, product *Product) error {
+	result, err := tx.ExecContext(ctx, `
+		UPDATE products
+		SET name = $2, slug = $3, description = $4, short_description = $5,
+		    brand_id = $6, is_featured = $7, version = version + 1, updated_at = NOW()
+		WHERE id = $1 AND version = $8 AND status = 'draft' AND deleted_at IS NULL`,
+		product.ID, product.Name, product.Slug, product.Description, product.ShortDescription,
+		product.BrandID, product.IsFeature, product.Version)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrProductVersionConflict
+	}
+	updated, err := p.GetProductForUpdate(ctx, tx, product.ID)
+	if err != nil {
+		return err
+	}
+	*product = *updated
+	return nil
+}
+
+func (p productPostgresRepository) DeleteDraftProduct(ctx context.Context, tx transaction.DBTX, id uuid.UUID, expectedVersion int64) error {
+	result, err := tx.ExecContext(ctx, `
+		UPDATE products
+		SET deleted_at = NOW(), updated_at = NOW()
+		WHERE id = $1 AND version = $2 AND status = 'draft' AND deleted_at IS NULL`, id, expectedVersion)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrProductVersionConflict
+	}
+	return nil
 }
 
 func (p productPostgresRepository) GetAllProducts(ctx context.Context) ([]*Product, error) {

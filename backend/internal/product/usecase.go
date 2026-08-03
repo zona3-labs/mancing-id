@@ -2,20 +2,14 @@ package product
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
-	dberrors "github.com/zona3-labs/mancing-id/internal/errors"
-	"github.com/zona3-labs/mancing-id/internal/util"
 )
 
 type ProductUsecase interface {
-	CreateProduct(ctx context.Context, product *Product) error
 	GetAllProducts(ctx context.Context) ([]*Product, error)
 	GetProductBySlug(ctx context.Context, slug string) (*ProductDetail, error)
 	GetProductDetailByID(ctx context.Context, id uuid.UUID) (*ProductDetail, error)
-	UpdateProduct(ctx context.Context, product *Product) error
-	DeleteProduct(ctx context.Context, id uuid.UUID) error
 
 	// Options
 	CreateProductOptionWithValues(ctx context.Context, option *ProductOption, values []*ProductOptionValue) (*ProductOptionWithValues, error)
@@ -51,28 +45,6 @@ func NewProductUsecase(repo ProductRepository) ProductUsecase {
 	return &productUsecase{repo: repo}
 }
 
-func (p productUsecase) CreateProduct(ctx context.Context, product *Product) error {
-	product.ID = uuid.New()
-	product.Version = 1
-	base := product.Name
-	if product.Slug != "" {
-		base = product.Slug
-	}
-
-	baseSlug := util.GenerateSlug(base)
-	product.Slug = baseSlug
-	for attempt := 2; ; attempt++ {
-		err := p.repo.CreateProduct(ctx, product)
-		if err == nil {
-			return nil
-		}
-		if !dberrors.IsUniqueViolation(err) {
-			return err
-		}
-		product.Slug = fmt.Sprintf("%s-%d", baseSlug, attempt)
-	}
-}
-
 func (p productUsecase) GetAllProducts(ctx context.Context) ([]*Product, error) {
 	return p.repo.GetAllProducts(ctx)
 }
@@ -83,30 +55,6 @@ func (p productUsecase) GetProductBySlug(ctx context.Context, slug string) (*Pro
 
 func (p productUsecase) GetProductDetailByID(ctx context.Context, id uuid.UUID) (*ProductDetail, error) {
 	return p.repo.GetProductDetailByID(ctx, id)
-}
-
-func (p productUsecase) UpdateProduct(ctx context.Context, product *Product) error {
-	base := product.Name
-	if product.Slug != "" {
-		base = product.Slug
-	}
-
-	baseSlug := util.GenerateSlug(base)
-	product.Slug = baseSlug
-	for attempt := 2; ; attempt++ {
-		err := p.repo.UpdateProduct(ctx, product)
-		if err == nil {
-			return nil
-		}
-		if !dberrors.IsUniqueViolation(err) {
-			return err
-		}
-		product.Slug = fmt.Sprintf("%s-%d", baseSlug, attempt)
-	}
-}
-
-func (p productUsecase) DeleteProduct(ctx context.Context, id uuid.UUID) error {
-	return p.repo.DeleteProduct(ctx, id)
 }
 
 // -------------------------------------------------------

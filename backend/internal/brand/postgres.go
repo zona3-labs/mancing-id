@@ -18,6 +18,10 @@ func NewBrandRepository(db *sql.DB) BrandRepository {
 	return &brandPostgresRepository{db: db, queries: brandDB.New(db)}
 }
 
+func NewCatalogBrandRepository(db *sql.DB) CatalogBrandRepository {
+	return &brandPostgresRepository{db: db, queries: brandDB.New(db)}
+}
+
 func (r brandPostgresRepository) CreateBrand(ctx context.Context, brand *Brand) error {
 	row, err := r.queries.CreateBrand(ctx, brandDB.CreateBrandParams{
 		ID:       brand.ID,
@@ -34,6 +38,26 @@ func (r brandPostgresRepository) CreateBrand(ctx context.Context, brand *Brand) 
 
 func (r brandPostgresRepository) GetBrandByID(ctx context.Context, id uuid.UUID) (*Brand, error) {
 	row, err := r.queries.GetBrandByID(ctx, id)
+	if err == sql.ErrNoRows {
+		return nil, ErrBrandNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	brand := fromDBBrand(row)
+	return &brand, nil
+}
+
+func (r brandPostgresRepository) GetBrandByIDForUpdate(ctx context.Context, tx transaction.DBTX, id uuid.UUID) (*Brand, error) {
+	var row brandDB.Brand
+	err := tx.QueryRowContext(ctx, `
+		SELECT id, name, slug, logo_path, status, version, created_at, updated_at, deleted_at
+		FROM brands
+		WHERE id = $1 AND deleted_at IS NULL
+		FOR UPDATE`, id).Scan(
+		&row.ID, &row.Name, &row.Slug, &row.LogoPath, &row.Status, &row.Version,
+		&row.CreatedAt, &row.UpdatedAt, &row.DeletedAt,
+	)
 	if err == sql.ErrNoRows {
 		return nil, ErrBrandNotFound
 	}
@@ -111,10 +135,6 @@ func (r brandPostgresRepository) ReactivateBrand(ctx context.Context, id uuid.UU
 	return r.classifyTransitionResult(ctx, id, expectedVersion, BrandStatusInactive, result, err)
 }
 
-func (r brandPostgresRepository) CountProductsByBrandID(ctx context.Context, id uuid.UUID) (int64, error) {
-	return r.queries.CountProductsByBrandID(ctx, uuid.NullUUID{UUID: id, Valid: true})
-}
-
 func (r brandPostgresRepository) AssociateLogo(ctx context.Context, tx transaction.DBTX, id uuid.UUID, logoPath string) (*string, error) {
 	var previous sql.NullString
 	if err := tx.QueryRowContext(ctx, `
@@ -147,8 +167,11 @@ func (r brandPostgresRepository) AssociateLogo(ctx context.Context, tx transacti
 	return &previous.String, nil
 }
 
-func (r brandPostgresRepository) DeleteBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error {
-	result, err := r.queries.DeleteBrand(ctx, brandDB.DeleteBrandParams{ID: id, Version: expectedVersion})
+func (r brandPostgresRepository) DeleteBrandInTransaction(ctx context.Context, tx transaction.DBTX, id uuid.UUID, expectedVersion int64) error {
+	result, err := tx.ExecContext(ctx, `
+		UPDATE brands
+		SET deleted_at = NOW(), version = version + 1, updated_at = NOW()
+		WHERE id = $1 AND version = $2 AND status = 'draft' AND deleted_at IS NULL`, id, expectedVersion)
 	if err != nil {
 		return err
 	}
@@ -157,23 +180,6 @@ func (r brandPostgresRepository) DeleteBrand(ctx context.Context, id uuid.UUID, 
 		return err
 	}
 	if affected == 0 {
-		brand, lookupErr := r.GetBrandByID(ctx, id)
-		if lookupErr != nil {
-			return lookupErr
-		}
-		if brand.Version != expectedVersion {
-			return ErrBrandVersionConflict
-		}
-		if brand.Status != BrandStatusDraft {
-			return ErrBrandNotEditable
-		}
-		products, countErr := r.CountProductsByBrandID(ctx, id)
-		if countErr != nil {
-			return countErr
-		}
-		if products > 0 {
-			return ErrBrandHasProducts
-		}
 		return ErrBrandVersionConflict
 	}
 	return nil

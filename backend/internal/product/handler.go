@@ -2,18 +2,21 @@ package product
 
 import (
 	"errors"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/zona3-labs/mancing-id/internal/brand"
 	"github.com/zona3-labs/mancing-id/internal/response"
 )
 
 type ProductHandler struct {
-	usecase ProductUsecase
+	usecase   ProductUsecase
+	authoring ProductCatalogService
 }
 
-func NewProductHandler(usecase ProductUsecase) *ProductHandler {
-	return &ProductHandler{usecase: usecase}
+func NewProductHandler(usecase ProductUsecase, authoring ProductCatalogService) *ProductHandler {
+	return &ProductHandler{usecase: usecase, authoring: authoring}
 }
 
 func (h *ProductHandler) RegisterRoutes(rg *gin.RouterGroup) {
@@ -103,8 +106,8 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 		IsFeature:        req.IsFeature,
 	}
 
-	if err := h.usecase.CreateProduct(c.Request.Context(), product); err != nil {
-		response.InternalError(c, err)
+	if err := h.authoring.CreateProduct(c.Request.Context(), product); err != nil {
+		h.writeError(c, err)
 		return
 	}
 
@@ -120,7 +123,7 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 // @Failure      500  {object}  response.ErrorEnvelope
 // @Router       /products [get]
 func (h *ProductHandler) GetAllProducts(c *gin.Context) {
-	products, err := h.usecase.GetAllProducts(c.Request.Context())
+	products, err := h.authoring.GetAllProducts(c.Request.Context())
 	if err != nil {
 		response.InternalError(c, err)
 		return
@@ -142,13 +145,9 @@ func (h *ProductHandler) GetAllProducts(c *gin.Context) {
 func (h *ProductHandler) GetProductBySlug(c *gin.Context) {
 	slug := c.Param("slug")
 
-	detail, err := h.usecase.GetProductBySlug(c.Request.Context(), slug)
+	detail, err := h.authoring.GetProductBySlug(c.Request.Context(), slug)
 	if err != nil {
-		if errors.Is(err, ErrProductNotFound) {
-			response.NotFound(c, "product not found")
-			return
-		}
-		response.InternalError(c, err)
+		h.writeError(c, err)
 		return
 	}
 
@@ -173,13 +172,9 @@ func (h *ProductHandler) GetProductByID(c *gin.Context) {
 		return
 	}
 
-	detail, err := h.usecase.GetProductDetailByID(c.Request.Context(), id)
+	detail, err := h.authoring.GetProductDetailByID(c.Request.Context(), id)
 	if err != nil {
-		if errors.Is(err, ErrProductNotFound) {
-			response.NotFound(c, "product not found")
-			return
-		}
-		response.InternalError(c, err)
+		h.writeError(c, err)
 		return
 	}
 
@@ -224,16 +219,8 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 		Version:          *req.Version,
 	}
 
-	if err := h.usecase.UpdateProduct(c.Request.Context(), product); err != nil {
-		if errors.Is(err, ErrProductNotFound) {
-			response.NotFound(c, "product not found")
-			return
-		}
-		if errors.Is(err, ErrProductVersionConflict) {
-			response.Conflict(c, "product was changed by another request")
-			return
-		}
-		response.InternalError(c, err)
+	if err := h.authoring.UpdateProduct(c.Request.Context(), product); err != nil {
+		h.writeError(c, err)
 		return
 	}
 
@@ -258,16 +245,43 @@ func (h *ProductHandler) DeleteProduct(c *gin.Context) {
 		return
 	}
 
-	if err := h.usecase.DeleteProduct(c.Request.Context(), id); err != nil {
-		if errors.Is(err, ErrProductNotFound) {
-			response.NotFound(c, "product not found")
-			return
-		}
-		response.InternalError(c, err)
+	var req struct {
+		Version *int64 `json:"version"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Version == nil {
+		response.Problem(c, http.StatusBadRequest, "product_version_required", "Version Required", "product version is required")
+		return
+	}
+
+	if err := h.authoring.DeleteProduct(c.Request.Context(), id, *req.Version); err != nil {
+		h.writeError(c, err)
 		return
 	}
 
 	response.NoContent(c)
+}
+
+func (h *ProductHandler) writeError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, ErrProductNotFound):
+		response.Problem(c, http.StatusNotFound, "product_not_found", "Product Not Found", "the product does not exist")
+	case errors.Is(err, ErrProductVersionConflict):
+		response.Problem(c, http.StatusConflict, "product_version_conflict", "Product Version Conflict", "the product was changed by another request")
+	case errors.Is(err, ErrProductNotEditable):
+		response.Problem(c, http.StatusConflict, "product_not_editable", "Product Not Editable", "only a never-published draft product can be changed or deleted")
+	case errors.Is(err, ErrProductDraftRequired):
+		response.Problem(c, http.StatusBadRequest, "product_draft_required", "Draft Product Required", "product authoring operations require a draft product")
+	case errors.Is(err, ErrProductBrandRequired):
+		response.Problem(c, http.StatusBadRequest, "product_brand_required", "Brand Required", "a product must reference an active brand")
+	case errors.Is(err, ErrProductBrandNotActive):
+		response.Problem(c, http.StatusConflict, "brand_not_active", "Brand Not Active", "a product can reference only an active brand")
+	case errors.Is(err, brand.ErrBrandNotFound):
+		response.Problem(c, http.StatusNotFound, "brand_not_found", "Brand Not Found", "the brand does not exist")
+	case errors.Is(err, ErrInvalidProduct):
+		response.Problem(c, http.StatusBadRequest, "invalid_product", "Invalid Product", "product name or slug must contain letters or numbers")
+	default:
+		response.InternalError(c, err)
+	}
 }
 
 // -------------------------------------------------------
