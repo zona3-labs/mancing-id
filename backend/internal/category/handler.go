@@ -119,11 +119,6 @@ func (h *CategoryHandler) GetCategory(c *gin.Context) {
 
 func (h *CategoryHandler) GetPublicCategory(c *gin.Context) {
 	identifier := c.Param("identifier")
-	if _, err := uuid.Parse(identifier); err == nil {
-		h.writeError(c, ErrCategoryNotFound)
-		return
-	}
-
 	category, err := h.usecase.GetActiveCategoryBySlug(c.Request.Context(), identifier)
 	if err != nil {
 		h.writeError(c, err)

@@ -313,6 +313,173 @@ func TestCategoryPublicLifecycleThroughHTTP(t *testing.T) {
 	}
 }
 
+func TestCategoryPublicHierarchyAndSlugReservationThroughHTTP(t *testing.T) {
+	db := openIntegrationDatabase(t)
+	defer db.Close()
+	if err := migrations.Reset(db); err != nil {
+		t.Fatalf("reset migrations: %v", err)
+	}
+
+	api := (&application{db: db, config: &config.Config{HttpServer: &config.HttpserverConfig{}}}).mount()
+	blockedParent := createCategoryHTTP(t, api, "Blocked Parent", "")
+	blockedChild := createCategoryHTTP(t, api, "Blocked Child", blockedParent.ID)
+	blockedActivation := requestJSON(t, api, http.MethodPost, "/api/v1/admin/categories/"+blockedChild.ID+"/activate", map[string]any{"version": blockedChild.Version})
+	assertProblem(t, blockedActivation, http.StatusConflict, "category_ancestor_not_active")
+
+	cycleRoot := createCategoryHTTP(t, api, "Cycle Root", "")
+	cycleChild := createCategoryHTTP(t, api, "Cycle Child", cycleRoot.ID)
+	cycleGrandchild := createCategoryHTTP(t, api, "Cycle Grandchild", cycleChild.ID)
+	cycle := requestJSON(t, api, http.MethodPut, "/api/v1/admin/categories/"+cycleRoot.ID, map[string]any{
+		"name":      "Cycle Root",
+		"parent_id": cycleGrandchild.ID,
+		"version":   cycleRoot.Version,
+	})
+	assertProblem(t, cycle, http.StatusBadRequest, "category_cycle")
+
+	root := createCategoryHTTP(t, api, "Fishing Gear", "")
+	child := createCategoryHTTP(t, api, "Fly Fishing", root.ID)
+	grandchild := createCategoryHTTP(t, api, "Fly Rods", child.ID)
+	activateCategoryHTTP(t, api, root)
+	activateCategoryHTTP(t, api, child)
+	activateCategoryHTTP(t, api, grandchild)
+
+	collection := requestJSON(t, api, http.MethodGet, "/api/v1/categories", nil)
+	if collection.status != http.StatusOK {
+		t.Fatalf("public category collection status = %d, body = %s", collection.status, collection.body)
+	}
+	var collectionBody struct {
+		Data []struct {
+			ID       string `json:"id"`
+			Children []struct {
+				ID       string `json:"id"`
+				Children []struct {
+					ID string `json:"id"`
+				} `json:"children"`
+			} `json:"children"`
+		} `json:"data"`
+	}
+	decodeJSON(t, collection.body, &collectionBody)
+	if len(collectionBody.Data) != 1 || collectionBody.Data[0].ID != root.ID {
+		t.Fatalf("public roots = %s", collection.body)
+	}
+	if len(collectionBody.Data[0].Children) != 1 || collectionBody.Data[0].Children[0].ID != child.ID {
+		t.Fatalf("public children = %s", collection.body)
+	}
+	if len(collectionBody.Data[0].Children[0].Children) != 1 || collectionBody.Data[0].Children[0].Children[0].ID != grandchild.ID {
+		t.Fatalf("public grandchildren = %s", collection.body)
+	}
+
+	childRead := requestJSON(t, api, http.MethodGet, "/api/v1/categories/"+child.Slug, nil)
+	if childRead.status != http.StatusOK {
+		t.Fatalf("public non-root category status = %d, body = %s", childRead.status, childRead.body)
+	}
+	var childReadBody struct {
+		Data struct {
+			ID       string `json:"id"`
+			Children []struct {
+				ID string `json:"id"`
+			} `json:"children"`
+		} `json:"data"`
+	}
+	decodeJSON(t, childRead.body, &childReadBody)
+	if childReadBody.Data.ID != child.ID || len(childReadBody.Data.Children) != 1 || childReadBody.Data.Children[0].ID != grandchild.ID {
+		t.Fatalf("public non-root subtree = %s", childRead.body)
+	}
+
+	retiredChild := requestJSON(t, api, http.MethodPost, "/api/v1/admin/categories/"+grandchild.ID+"/retire", map[string]any{"version": grandchild.Version + 1})
+	if retiredChild.status != http.StatusNoContent {
+		t.Fatalf("retire grandchild status = %d, body = %s", retiredChild.status, retiredChild.body)
+	}
+	retiredChild = requestJSON(t, api, http.MethodPost, "/api/v1/admin/categories/"+child.ID+"/retire", map[string]any{"version": child.Version + 1})
+	if retiredChild.status != http.StatusNoContent {
+		t.Fatalf("retire child status = %d, body = %s", retiredChild.status, retiredChild.body)
+	}
+
+	collection = requestJSON(t, api, http.MethodGet, "/api/v1/categories", nil)
+	if bytes.Contains(collection.body, []byte(grandchild.Slug)) || bytes.Contains(collection.body, []byte(child.Slug)) {
+		t.Fatalf("retired categories leaked into public collection = %s", collection.body)
+	}
+	retiredRead := requestJSON(t, api, http.MethodGet, "/api/v1/categories/"+child.Slug, nil)
+	if retiredRead.status != http.StatusNotFound {
+		t.Fatalf("retired non-root category status = %d, body = %s", retiredRead.status, retiredRead.body)
+	}
+	retiredRoot := requestJSON(t, api, http.MethodPost, "/api/v1/admin/categories/"+root.ID+"/retire", map[string]any{"version": root.Version + 1})
+	if retiredRoot.status != http.StatusNoContent {
+		t.Fatalf("retire root status = %d, body = %s", retiredRoot.status, retiredRoot.body)
+	}
+
+	reserved := createCategoryWithSlugHTTP(t, api, "Replacement Fishing Gear", "Fishing Gear", "")
+	if reserved.Slug == root.Slug {
+		t.Fatalf("published slug was reused: %s", reserved.Slug)
+	}
+	changed := requestJSON(t, api, http.MethodPut, "/api/v1/admin/categories/"+root.ID, map[string]any{
+		"name":    "Renamed Fishing Gear",
+		"slug":    "renamed-fishing-gear",
+		"version": root.Version + 2,
+	})
+	assertProblem(t, changed, http.StatusConflict, "category_not_editable")
+
+	const uuidSlug = "11111111-1111-1111-1111-111111111111"
+	uuidCategory := createCategoryWithSlugHTTP(t, api, "UUID Slug Category", uuidSlug, "")
+	activateCategoryHTTP(t, api, uuidCategory)
+	uuidRead := requestJSON(t, api, http.MethodGet, "/api/v1/categories/"+uuidSlug, nil)
+	if uuidRead.status != http.StatusOK {
+		t.Fatalf("UUID-shaped public slug status = %d, body = %s", uuidRead.status, uuidRead.body)
+	}
+}
+
+type categoryHTTP struct {
+	ID      string `json:"id"`
+	Slug    string `json:"slug"`
+	Version int64  `json:"version"`
+}
+
+func createCategoryHTTP(t *testing.T, api http.Handler, name, parentID string) categoryHTTP {
+	return createCategoryWithSlugHTTP(t, api, name, "", parentID)
+}
+
+func createCategoryWithSlugHTTP(t *testing.T, api http.Handler, name, slug, parentID string) categoryHTTP {
+	t.Helper()
+	payload := map[string]any{"name": name}
+	if slug != "" {
+		payload["slug"] = slug
+	}
+	if parentID != "" {
+		payload["parent_id"] = parentID
+	}
+	created := requestJSON(t, api, http.MethodPost, "/api/v1/admin/categories", payload)
+	if created.status != http.StatusCreated {
+		t.Fatalf("create category status = %d, body = %s", created.status, created.body)
+	}
+	var body struct {
+		Data categoryHTTP `json:"data"`
+	}
+	decodeJSON(t, created.body, &body)
+	return body.Data
+}
+
+func activateCategoryHTTP(t *testing.T, api http.Handler, category categoryHTTP) {
+	t.Helper()
+	activated := requestJSON(t, api, http.MethodPost, "/api/v1/admin/categories/"+category.ID+"/activate", map[string]any{"version": category.Version})
+	if activated.status != http.StatusNoContent {
+		t.Fatalf("activate category status = %d, body = %s", activated.status, activated.body)
+	}
+}
+
+func assertProblem(t *testing.T, result httpResult, status int, code string) {
+	t.Helper()
+	if result.status != status || result.contentType != "application/problem+json" {
+		t.Fatalf("problem response = %#v", result)
+	}
+	var problem struct {
+		Code string `json:"code"`
+	}
+	decodeJSON(t, result.body, &problem)
+	if problem.Code != code {
+		t.Fatalf("problem code = %q, want %q; body = %s", problem.Code, code, result.body)
+	}
+}
+
 func TestBrandLifecycleThroughHTTP(t *testing.T) {
 	db := openIntegrationDatabase(t)
 	defer db.Close()

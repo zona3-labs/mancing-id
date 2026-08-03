@@ -133,20 +133,16 @@ func (c categoryUsecase) ActivateCategory(ctx context.Context, id uuid.UUID, exp
 	if category.Status != CategoryStatusDraft {
 		return ErrCategoryNotEditable
 	}
-	if category.ParentID != nil {
-		currentID := *category.ParentID
-		for {
-			parent, err := c.repo.GetCategoryByID(ctx, currentID)
-			if err != nil {
-				return ErrParentCategoryNotFound
-			}
-			if parent.Status != CategoryStatusActive {
-				return ErrCategoryAncestorNotActive
-			}
-			if parent.ParentID == nil {
-				break
-			}
-			currentID = *parent.ParentID
+	ancestors, err := c.categoryAncestors(ctx, category.ID, category.ParentID)
+	if err != nil {
+		if err == ErrCategoryNotFound {
+			return ErrParentCategoryNotFound
+		}
+		return err
+	}
+	for _, parent := range ancestors {
+		if parent.Status != CategoryStatusActive {
+			return ErrCategoryAncestorNotActive
 		}
 	}
 	return c.repo.ActivateCategory(ctx, id, expectedVersion)
@@ -192,27 +188,34 @@ func (c categoryUsecase) validateParent(ctx context.Context, categoryID uuid.UUI
 	if parentID == nil {
 		return nil
 	}
-	if *parentID == categoryID {
-		return ErrCategoryCycle
+	_, err := c.categoryAncestors(ctx, categoryID, parentID)
+	if err == ErrCategoryNotFound {
+		return ErrParentCategoryNotFound
+	}
+	return err
+}
+
+func (c categoryUsecase) categoryAncestors(ctx context.Context, categoryID uuid.UUID, parentID *uuid.UUID) ([]*Category, error) {
+	if parentID == nil {
+		return nil, nil
 	}
 
+	ancestors := make([]*Category, 0)
 	visited := map[uuid.UUID]struct{}{categoryID: {}}
 	currentID := *parentID
 	for {
 		if _, seen := visited[currentID]; seen {
-			return ErrCategoryCycle
+			return nil, ErrCategoryCycle
 		}
 		visited[currentID] = struct{}{}
 
 		parent, err := c.repo.GetCategoryByID(ctx, currentID)
 		if err != nil {
-			if err == ErrCategoryNotFound {
-				return ErrParentCategoryNotFound
-			}
-			return err
+			return nil, err
 		}
+		ancestors = append(ancestors, parent)
 		if parent.ParentID == nil {
-			return nil
+			return ancestors, nil
 		}
 		currentID = *parent.ParentID
 	}
