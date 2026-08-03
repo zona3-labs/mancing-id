@@ -71,8 +71,3 @@ WHERE brands.id = $1
   AND brands.version = $2
   AND brands.deleted_at IS NULL
   AND NOT EXISTS (SELECT 1 FROM products WHERE products.brand_id = brands.id);
-
--- name: UpdateBrandLogo :execresult
-UPDATE brands
-SET logo_path = $2, updated_at = NOW()
-WHERE id = $1 AND deleted_at IS NULL;

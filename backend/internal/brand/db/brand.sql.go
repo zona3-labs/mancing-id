@@ -317,18 +317,3 @@ func (q *Queries) UpdateBrand(ctx context.Context, arg UpdateBrandParams) (Brand
 	)
 	return i, err
 }
-
-const updateBrandLogo = `-- name: UpdateBrandLogo :execresult
-UPDATE brands
-SET logo_path = $2, updated_at = NOW()
-WHERE id = $1 AND deleted_at IS NULL
-`
-
-type UpdateBrandLogoParams struct {
-	ID       uuid.UUID `json:"id"`
-	LogoPath *string   `json:"logo_path"`
-}
-
-func (q *Queries) UpdateBrandLogo(ctx context.Context, arg UpdateBrandLogoParams) (sql.Result, error) {
-	return q.db.ExecContext(ctx, updateBrandLogo, arg.ID, arg.LogoPath)
-}

@@ -3,11 +3,9 @@ package brand
 import (
 	"context"
 	"fmt"
-	"mime/multipart"
 
 	"github.com/google/uuid"
 	dberrors "github.com/zona3-labs/mancing-id/internal/errors"
-	"github.com/zona3-labs/mancing-id/internal/upload"
 	"github.com/zona3-labs/mancing-id/internal/util"
 )
 
@@ -22,20 +20,21 @@ type BrandUsecase interface {
 	ActivateBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 	DeactivateBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 	ReactivateBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
-	UploadBrandLogo(ctx context.Context, id uuid.UUID, file multipart.File, header *multipart.FileHeader) (string, error)
 	DeleteBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 }
 
 type brandUsecase struct {
-	repo     BrandRepository
-	uploader upload.FileUploader
+	repo BrandRepository
 }
 
-func NewBrandUsecase(repo BrandRepository, uploader upload.FileUploader) BrandUsecase {
-	return &brandUsecase{repo: repo, uploader: uploader}
+func NewBrandUsecase(repo BrandRepository) BrandUsecase {
+	return &brandUsecase{repo: repo}
 }
 
 func (b brandUsecase) CreateBrand(ctx context.Context, brand *Brand) error {
+	if brand.LogoPath != nil {
+		return ErrManagedLogoRequired
+	}
 	brand.ID = uuid.New()
 	brand.Status = BrandStatusDraft
 	brand.Version = 1
@@ -81,6 +80,9 @@ func (b brandUsecase) GetPublicBrandBySlug(ctx context.Context, slug string) (*B
 }
 
 func (b brandUsecase) UpdateBrand(ctx context.Context, brand *Brand, expectedVersion int64) error {
+	if brand.LogoPath != nil {
+		return ErrManagedLogoRequired
+	}
 	current, err := b.repo.GetBrandByID(ctx, brand.ID)
 	if err != nil {
 		return err
@@ -135,20 +137,6 @@ func (b brandUsecase) transition(ctx context.Context, id uuid.UUID, expectedVers
 		return ErrBrandNotEditable
 	}
 	return mutate(ctx, id, expectedVersion)
-}
-
-func (b brandUsecase) UploadBrandLogo(ctx context.Context, id uuid.UUID, file multipart.File, header *multipart.FileHeader) (string, error) {
-	if _, err := b.repo.GetBrandByID(ctx, id); err != nil {
-		return "", err
-	}
-	url, err := b.uploader.Upload(ctx, file, header, id.String())
-	if err != nil {
-		return "", err
-	}
-	if err := b.repo.UpdateBrandLogo(ctx, id, url); err != nil {
-		return "", err
-	}
-	return url, nil
 }
 
 func (b brandUsecase) DeleteBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error {

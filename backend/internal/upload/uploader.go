@@ -3,12 +3,22 @@ package upload
 import (
 	"context"
 	"mime/multipart"
+	"time"
+
+	"github.com/google/uuid"
 )
 
-// FileUploader is the interface that wraps the Upload method.
-// Implementations include S3Uploader (for AWS S3 and MinIO).
-type FileUploader interface {
-	// Upload stores the given file and returns its publicly accessible URL.
-	// keyPrefix is used to namespace the object key (e.g. the brand's UUID).
-	Upload(ctx context.Context, file multipart.File, header *multipart.FileHeader, keyPrefix string) (string, error)
+type TemporaryImage struct {
+	ID           string
+	URL          string
+	TemporaryKey string
+	OwnedKey     string
+	UploadedAt   time.Time
+}
+
+type MediaAdapter interface {
+	UploadTemporary(context.Context, multipart.File, *multipart.FileHeader, uuid.UUID) (TemporaryImage, error)
+	FinalizeTemporary(context.Context, TemporaryImage) error
+	ScheduleDelete(context.Context, string) error
+	CleanStaleTemporary(context.Context, time.Time) (int, error)
 }

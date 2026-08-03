@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"time"
 
 	"github.com/zona3-labs/mancing-id/internal/config"
 	"github.com/zona3-labs/mancing-id/internal/infrastructure"
@@ -34,11 +36,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	api := application{
-		config:   cfg,
-		db:       db,
-		uploader: upload.NewS3Uploader(s3Client, cfg.Upload),
-	}
+	s3Uploader := upload.NewS3Uploader(s3Client, cfg.Upload)
+	s3Uploader.StartTemporaryCleanup(context.Background(), time.Hour, 24*time.Hour)
+	api := application{config: cfg, db: db, media: s3Uploader}
 
 	if err := api.run(api.mount()); err != nil {
 		log.Fatalf("server failed to run: %v", err)

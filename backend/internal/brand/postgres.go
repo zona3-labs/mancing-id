@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	brandDB "github.com/zona3-labs/mancing-id/internal/brand/db"
+	"github.com/zona3-labs/mancing-id/internal/transaction"
 )
 
 type brandPostgresRepository struct {
@@ -114,19 +115,36 @@ func (r brandPostgresRepository) CountProductsByBrandID(ctx context.Context, id 
 	return r.queries.CountProductsByBrandID(ctx, uuid.NullUUID{UUID: id, Valid: true})
 }
 
-func (r brandPostgresRepository) UpdateBrandLogo(ctx context.Context, id uuid.UUID, logoPath string) error {
-	result, err := r.queries.UpdateBrandLogo(ctx, brandDB.UpdateBrandLogoParams{ID: id, LogoPath: &logoPath})
+func (r brandPostgresRepository) AssociateLogo(ctx context.Context, tx transaction.DBTX, id uuid.UUID, logoPath string) (*string, error) {
+	var previous sql.NullString
+	if err := tx.QueryRowContext(ctx, `
+		SELECT logo_path
+		FROM brands
+		WHERE id = $1 AND deleted_at IS NULL
+		FOR UPDATE`, id).Scan(&previous); err == sql.ErrNoRows {
+		return nil, ErrBrandNotFound
+	} else if err != nil {
+		return nil, err
+	}
+
+	result, err := tx.ExecContext(ctx, `
+		UPDATE brands
+		SET logo_path = $2, updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL`, id, logoPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	affected, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if affected == 0 {
-		return ErrBrandNotFound
+	if affected != 1 {
+		return nil, ErrBrandNotFound
 	}
-	return nil
+	if !previous.Valid {
+		return nil, nil
+	}
+	return &previous.String, nil
 }
 
 func (r brandPostgresRepository) DeleteBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error {

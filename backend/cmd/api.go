@@ -14,17 +14,20 @@ import (
 
 	_ "github.com/zona3-labs/mancing-id/docs"
 	"github.com/zona3-labs/mancing-id/internal/brand"
+	"github.com/zona3-labs/mancing-id/internal/catalog"
 	"github.com/zona3-labs/mancing-id/internal/category"
 	"github.com/zona3-labs/mancing-id/internal/config"
 	"github.com/zona3-labs/mancing-id/internal/product"
 	"github.com/zona3-labs/mancing-id/internal/response"
+	"github.com/zona3-labs/mancing-id/internal/transaction"
 	"github.com/zona3-labs/mancing-id/internal/upload"
 )
 
 type application struct {
-	config   *config.Config
-	db       *sql.DB
-	uploader upload.FileUploader
+	config    *config.Config
+	db        *sql.DB
+	media     upload.MediaAdapter
+	txManager transaction.Manager
 }
 
 func (app *application) mount() http.Handler {
@@ -63,8 +66,13 @@ func (app *application) registerV1Routes(v1 *gin.RouterGroup) {
 
 	// Brand
 	brandRepo := brand.NewBrandRepository(app.db)
-	brandUsecase := brand.NewBrandUsecase(brandRepo, app.uploader)
-	brandHandler := brand.NewBrandHandler(brandUsecase)
+	brandUsecase := brand.NewBrandUsecase(brandRepo)
+	txManager := app.txManager
+	if txManager == nil {
+		txManager = transaction.NewSQLManager(app.db)
+	}
+	brandLogoService := catalog.NewBrandLogoService(brandRepo, app.media, txManager)
+	brandHandler := brand.NewBrandHandler(brandUsecase, brandLogoService)
 	brandHandler.RegisterRoutes(v1)
 	brandHandler.RegisterAdminRoutes(v1)
 

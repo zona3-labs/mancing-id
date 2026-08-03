@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/zona3-labs/mancing-id/internal/transaction"
 )
 
 type BrandRepository interface {
@@ -18,6 +19,6 @@ type BrandRepository interface {
 	DeactivateBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 	ReactivateBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 	CountProductsByBrandID(ctx context.Context, id uuid.UUID) (int64, error)
-	UpdateBrandLogo(ctx context.Context, id uuid.UUID, logoPath string) error
+	AssociateLogo(ctx context.Context, tx transaction.DBTX, id uuid.UUID, logoPath string) (*string, error)
 	DeleteBrand(ctx context.Context, id uuid.UUID, expectedVersion int64) error
 }

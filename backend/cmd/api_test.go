@@ -2,17 +2,23 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/zona3-labs/mancing-id/internal/config"
+	"github.com/zona3-labs/mancing-id/internal/upload"
 	"github.com/zona3-labs/mancing-id/migrations"
 )
 
@@ -538,6 +544,114 @@ func TestBrandLifecycleThroughHTTP(t *testing.T) {
 	}
 }
 
+func TestBrandLogoManagedLifecycleThroughHTTP(t *testing.T) {
+	db := openIntegrationDatabase(t)
+	defer db.Close()
+	if err := migrations.Reset(db); err != nil {
+		t.Fatalf("reset migrations: %v", err)
+	}
+
+	media := &httpFakeMediaAdapter{}
+	api := (&application{
+		db:     db,
+		media:  media,
+		config: &config.Config{HttpServer: &config.HttpserverConfig{}},
+	}).mount()
+	created := requestJSON(t, api, http.MethodPost, "/api/v1/admin/brands", map[string]any{"name": "Logo Brand"})
+	if created.status != http.StatusCreated {
+		t.Fatalf("create brand status = %d, body = %s", created.status, created.body)
+	}
+	var createdBody struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	decodeJSON(t, created.body, &createdBody)
+
+	first := requestMultipart(t, api, "/api/v1/admin/brands/"+createdBody.Data.ID+"/logo", []byte("first"))
+	if first.status != http.StatusOK || media.finalized != 1 {
+		t.Fatalf("first logo upload = %#v, finalized=%d", first, media.finalized)
+	}
+	var firstBody struct {
+		Data struct {
+			LogoPath string `json:"logo_path"`
+		} `json:"data"`
+	}
+	decodeJSON(t, first.body, &firstBody)
+
+	second := requestMultipart(t, api, "/api/v1/admin/brands/"+createdBody.Data.ID+"/logo", []byte("second"))
+	if second.status != http.StatusOK || media.finalized != 2 {
+		t.Fatalf("replacement logo upload = %#v, finalized=%d", second, media.finalized)
+	}
+	if len(media.deleted) != 1 || media.deleted[0] != firstBody.Data.LogoPath {
+		t.Fatalf("deleted managed logos = %v, want [%q]", media.deleted, firstBody.Data.LogoPath)
+	}
+
+	external := requestJSON(t, api, http.MethodPut, "/api/v1/admin/brands/"+createdBody.Data.ID, map[string]any{
+		"name":      "Logo Brand",
+		"logo_path": "https://external.example/logo.png",
+		"version":   1,
+	})
+	if external.status != http.StatusBadRequest || external.contentType != "application/problem+json" {
+		t.Fatalf("external logo input = %#v", external)
+	}
+	var problem struct {
+		Code string `json:"code"`
+	}
+	decodeJSON(t, external.body, &problem)
+	if problem.Code != "managed_logo_required" {
+		t.Fatalf("external logo problem = %s", external.body)
+	}
+
+	for _, testCase := range []struct {
+		errCode string
+		err     error
+	}{
+		{errCode: "invalid_logo_type", err: upload.ErrInvalidFileType},
+		{errCode: "logo_too_large", err: upload.ErrFileTooLarge},
+		{errCode: "invalid_logo_image", err: upload.ErrImageDecode},
+	} {
+		media.uploadErr = testCase.err
+		invalid := requestMultipart(t, api, "/api/v1/admin/brands/"+createdBody.Data.ID+"/logo", []byte("invalid"))
+		if invalid.status != http.StatusBadRequest || invalid.contentType != "application/problem+json" {
+			t.Fatalf("%s response = %#v", testCase.errCode, invalid)
+		}
+		decodeJSON(t, invalid.body, &problem)
+		if problem.Code != testCase.errCode {
+			t.Fatalf("%s problem = %s", testCase.errCode, invalid.body)
+		}
+	}
+}
+
+type httpFakeMediaAdapter struct {
+	next      int
+	finalized int
+	deleted   []string
+	uploadErr error
+}
+
+func (f *httpFakeMediaAdapter) UploadTemporary(context.Context, multipart.File, *multipart.FileHeader, uuid.UUID) (upload.TemporaryImage, error) {
+	if f.uploadErr != nil {
+		return upload.TemporaryImage{}, f.uploadErr
+	}
+	f.next++
+	return upload.TemporaryImage{URL: "https://managed.example/logo-" + strconv.Itoa(f.next)}, nil
+}
+
+func (f *httpFakeMediaAdapter) FinalizeTemporary(context.Context, upload.TemporaryImage) error {
+	f.finalized++
+	return nil
+}
+
+func (f *httpFakeMediaAdapter) ScheduleDelete(_ context.Context, logo string) error {
+	f.deleted = append(f.deleted, logo)
+	return nil
+}
+
+func (f *httpFakeMediaAdapter) CleanStaleTemporary(context.Context, time.Time) (int, error) {
+	return 0, nil
+}
+
 func TestProductUpdateTargetsRequestedProductThroughHTTP(t *testing.T) {
 	db := openIntegrationDatabase(t)
 	defer db.Close()
@@ -615,6 +729,32 @@ func requestJSON(t *testing.T, handler http.Handler, method, path string, payloa
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	return httpResult{
+		status:      recorder.Code,
+		body:        recorder.Body.Bytes(),
+		contentType: recorder.Header().Get("Content-Type"),
+	}
+}
+
+func requestMultipart(t *testing.T, handler http.Handler, path string, content []byte) httpResult {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("logo", "logo.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, path, &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, req)
 	return httpResult{

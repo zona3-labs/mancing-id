@@ -3,6 +3,7 @@ package brand
 import (
 	"context"
 	"errors"
+	"mime/multipart"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -12,11 +13,20 @@ import (
 )
 
 type BrandHandler struct {
-	usecase BrandUsecase
+	usecase     BrandUsecase
+	logoService BrandLogoService
 }
 
-func NewBrandHandler(usecase BrandUsecase) *BrandHandler {
-	return &BrandHandler{usecase: usecase}
+type BrandLogoService interface {
+	UploadBrandLogo(context.Context, uuid.UUID, multipart.File, *multipart.FileHeader) (string, error)
+}
+
+func NewBrandHandler(usecase BrandUsecase, logoServices ...BrandLogoService) *BrandHandler {
+	var logoService BrandLogoService
+	if len(logoServices) > 0 {
+		logoService = logoServices[0]
+	}
+	return &BrandHandler{usecase: usecase, logoService: logoService}
 }
 
 func (h *BrandHandler) RegisterRoutes(rg *gin.RouterGroup) {
@@ -59,6 +69,10 @@ func (h *BrandHandler) CreateBrand(c *gin.Context) {
 	var req createBrandRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Problem(c, http.StatusBadRequest, "invalid_request", "Invalid Request", "brand name is required")
+		return
+	}
+	if req.LogoPath != nil {
+		response.Problem(c, http.StatusBadRequest, "managed_logo_required", "Managed Logo Required", "brand logos must be uploaded as managed images")
 		return
 	}
 
@@ -123,6 +137,10 @@ func (h *BrandHandler) UpdateBrand(c *gin.Context) {
 		response.Problem(c, http.StatusBadRequest, "brand_version_required", "Version Required", "brand version is required")
 		return
 	}
+	if req.LogoPath != nil {
+		response.Problem(c, http.StatusBadRequest, "managed_logo_required", "Managed Logo Required", "brand logos must be uploaded as managed images")
+		return
+	}
 
 	brand := &Brand{ID: id, Name: req.Name, Slug: req.Slug, LogoPath: req.LogoPath}
 	if err := h.usecase.UpdateBrand(c.Request.Context(), brand, *req.Version); err != nil {
@@ -179,6 +197,10 @@ func (h *BrandHandler) DeleteBrand(c *gin.Context) {
 }
 
 func (h *BrandHandler) UploadBrandLogo(c *gin.Context) {
+	if h.logoService == nil {
+		response.InternalError(c, errors.New("brand logo service is not configured"))
+		return
+	}
 	id, err := parseBrandID(c)
 	if err != nil {
 		return
@@ -190,11 +212,15 @@ func (h *BrandHandler) UploadBrandLogo(c *gin.Context) {
 	}
 	defer file.Close()
 
-	url, err := h.usecase.UploadBrandLogo(c.Request.Context(), id, file, header)
+	url, err := h.logoService.UploadBrandLogo(c.Request.Context(), id, file, header)
 	if err != nil {
 		switch {
-		case errors.Is(err, upload.ErrInvalidFileType), errors.Is(err, upload.ErrFileTooLarge):
-			response.Problem(c, http.StatusBadRequest, "invalid_logo", "Invalid Logo", err.Error())
+		case errors.Is(err, upload.ErrInvalidFileType):
+			response.Problem(c, http.StatusBadRequest, "invalid_logo_type", "Invalid Logo Type", "logo must be a JPEG, PNG, or WebP image")
+		case errors.Is(err, upload.ErrFileTooLarge):
+			response.Problem(c, http.StatusBadRequest, "logo_too_large", "Logo Too Large", "logo exceeds the maximum allowed size")
+		case errors.Is(err, upload.ErrImageDecode):
+			response.Problem(c, http.StatusBadRequest, "invalid_logo_image", "Invalid Logo Image", "logo image could not be decoded")
 		default:
 			h.writeError(c, err)
 		}
@@ -223,6 +249,8 @@ func (h *BrandHandler) writeError(c *gin.Context, err error) {
 		response.Problem(c, http.StatusConflict, "brand_not_editable", "Brand Not Editable", "only a draft brand can be changed or deleted")
 	case errors.Is(err, ErrInvalidBrand):
 		response.Problem(c, http.StatusBadRequest, "invalid_brand", "Invalid Brand", "brand name must contain letters or numbers")
+	case errors.Is(err, ErrManagedLogoRequired):
+		response.Problem(c, http.StatusBadRequest, "managed_logo_required", "Managed Logo Required", "brand logos must be uploaded as managed images")
 	default:
 		response.InternalError(c, err)
 	}
